@@ -1,6 +1,6 @@
 /* Fabric Stash — main app logic (vanilla JS, no dependencies). */
 (() => {
-  const APP_VERSION = 'v6';
+  const APP_VERSION = 'v7';
   const COLORS = [
     '', 'White', 'Cream / ivory', 'Black', 'Gray', 'Brown / tan', 'Red',
     'Pink', 'Orange', 'Yellow', 'Green', 'Blue', 'Navy', 'Purple',
@@ -19,6 +19,16 @@
 
   const threadId = (brand, code) => brand + '|' + code;
   const brandShort = b => b.startsWith('Gütermann') ? 'Gütermann' : 'Coats & Clark';
+
+  // representative hex for each named color, used when the color is picked
+  // from the dropdown rather than detected from a photo
+  const NAMED_HEX = {
+    'White': '#f5f4f0', 'Cream / ivory': '#f1e8d2', 'Black': '#1e1e1e',
+    'Gray': '#8b8b8b', 'Brown / tan': '#8b5f3d', 'Red': '#c11f2f',
+    'Pink': '#e26a8d', 'Orange': '#e97d24', 'Yellow': '#f0c419',
+    'Green': '#3f8f45', 'Blue': '#2f579c', 'Navy': '#1e2a50',
+    'Purple': '#5f3d85', 'Teal': '#1f7d84',
+  };
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -263,33 +273,38 @@
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
+        // a fired onload with zero dimensions means the photo never
+        // actually decoded — report nothing rather than reading black
+        const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+        if (!W || !H) { resolve(null); return; }
         const N = 96;
         const canvas = document.createElement('canvas');
         canvas.width = N; canvas.height = N;
         const ctx = canvas.getContext('2d');
         // sample the center of the photo — the edges are often table,
         // background, or shadow rather than the fabric itself
-        const cropX = img.width * 0.14, cropY = img.height * 0.14;
-        ctx.drawImage(img, cropX, cropY,
-          img.width - 2 * cropX, img.height - 2 * cropY, 0, 0, N, N);
+        const cropX = W * 0.14, cropY = H * 0.14;
+        ctx.drawImage(img, cropX, cropY, W - 2 * cropX, H - 2 * cropY, 0, 0, N, N);
         const data = ctx.getImageData(0, 0, N, N).data;
 
-        // blank canvas means the image never decoded — report nothing
-        // rather than classifying transparent black
+        // blank canvas means the draw silently failed — same deal
         let alphaSum = 0;
         for (let i = 3; i < data.length; i += 4) alphaSum += data[i];
         if (alphaSum / (data.length / 4) < 10) { resolve(null); return; }
 
-        // auto-exposure: dim indoor photos read as near-black, so lift
-        // underexposed images toward mid-gray before classifying
+        // auto-levels: phone cameras underexpose fabric close-ups badly, and
+        // dim pixels read as "black". Stretch the luminance range of any
+        // underexposed photo so its shadows-to-highlights span the full scale.
         const lums = [];
         for (let i = 0; i < data.length; i += 4) {
           lums.push(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
         }
         lums.sort((a, b) => a - b);
-        const medianLum = lums[lums.length >> 1] / 255;
-        const gain = medianLum > 0.01 && medianLum < 0.32
-          ? Math.min(2.5, 0.45 / medianLum) : 1;
+        const pct = q => lums[Math.min(lums.length - 1, Math.floor(lums.length * q))];
+        const p50 = pct(0.5);
+        // multiplicative gain preserves hue and saturation, unlike a
+        // per-channel stretch which turns dim colors neon
+        const gain = p50 > 0 && p50 < 96 ? Math.min(4, 100 / p50) : 1;
         const px = i => Math.min(255, data[i] * gain);
 
         const hueBuckets = {}; // named color -> pixel count
@@ -318,7 +333,10 @@
           count++;
 
           let name;
-          if (s < 0.14) {
+          // dark pixels lose saturation to camera noise, so require much
+          // less of it before trusting the hue instead of calling it neutral
+          const sCut = l < 0.3 ? 0.08 : 0.14;
+          if (s < sCut) {
             name = l > 0.87 ? 'White' : l < 0.16 ? 'Black' : 'Gray';
           } else if (h < 15 || h >= 345) {
             name = l > 0.62 ? 'Pink' : 'Red';
@@ -784,6 +802,22 @@
       renderThreadDrawer();
     });
     $('t-add').addEventListener('click', addThreadManually);
+
+    // picking a named color from the dropdowns updates the stored hex too,
+    // so the swatches and thread suggestions follow the manual choice
+    const onNamedColor = slot => {
+      const sel = slot === 0 ? $('f-color') : $('f-color2');
+      const hx = NAMED_HEX[sel.value];
+      if (!hx) return; // '—' or Multicolor: keep whatever the photo found
+      if (!detectedColors) detectedColors = { colorHex: null, color2Hex: null, palette: [] };
+      if (!Array.isArray(detectedColors.palette)) detectedColors.palette = [];
+      if (slot === 0) { detectedColors.colorHex = hx; detectedColors.palette[0] = hx; }
+      else { detectedColors.color2Hex = hx; detectedColors.palette[1] = hx; }
+      renderPaletteRow();
+      renderFormThreadRow(detectedColors.colorHex);
+    };
+    $('f-color').addEventListener('change', () => onNamedColor(0));
+    $('f-color2').addEventListener('change', () => onNamedColor(1));
 
     // manual edits to the color swatch circles
     $('palette-row').addEventListener('input', e => {

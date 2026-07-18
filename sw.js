@@ -1,7 +1,7 @@
 /* Offline cache — the whole app shell works with no connection.
  * Page loads are network-first (fresh app when online, cache offline);
  * other assets are cache-first and refresh when the cache version bumps. */
-const CACHE = 'fabric-stash-v6';
+const CACHE = 'fabric-stash-v7';
 const ASSETS = [
   './',
   './index.html',
