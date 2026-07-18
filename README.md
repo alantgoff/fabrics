@@ -25,13 +25,15 @@ installed.
 
 ## Putting it on an iPhone
 
-1. Host the files somewhere with HTTPS. The easiest way is **GitHub Pages**:
-   repo **Settings → Pages → Deploy from a branch**, pick this branch, root
-   folder. (Note: Pages requires the repo to be public, or a paid plan for
+1. Enable **GitHub Pages**: repo **Settings → Pages → Build and deployment
+   → Source: GitHub Actions**. The included workflow
+   (`.github/workflows/pages.yml`) deploys automatically on every push to
+   `main`. (Note: Pages requires the repo to be public, or a paid plan for
    private repos.)
-2. On the iPhone, open the Pages URL in **Safari**.
+2. On the iPhone, open <https://alantgoff.github.io/fabrics/> in **Safari**.
 3. Tap the **Share** button → **Add to Home Screen**.
-4. Done — it launches full-screen like a native app and works offline.
+4. Done — it launches full-screen like a native app, works offline, and
+   picks up new versions automatically.
 
 > **Tip:** since data lives on the device, use **More → Export stash** once in
 > a while to save a backup file.
