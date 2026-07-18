@@ -1,6 +1,86 @@
 /* Fabric Stash — main app logic (vanilla JS, no dependencies). */
 (() => {
-  const APP_VERSION = 'v7';
+  const APP_VERSION = 'v8';
+
+  /* ---------- custom field options ----------
+   * User-created values for the dropdown fields, shared across fabrics.
+   * color pool is shared by the primary and secondary selects. */
+  const CUSTOMS_KEY = 'fabric-stash-customs';
+  let customs = { type: [], weight: [], color: [], pattern: [] };
+  try {
+    const stored = JSON.parse(localStorage.getItem(CUSTOMS_KEY) || '{}');
+    for (const k of Object.keys(customs)) {
+      if (Array.isArray(stored[k])) customs[k] = stored[k].filter(v => typeof v === 'string');
+    }
+  } catch {}
+  function saveCustoms() {
+    try { localStorage.setItem(CUSTOMS_KEY, JSON.stringify(customs)); } catch {}
+  }
+  function addCustom(pool, value) {
+    if (!customs[pool].some(v => v.toLowerCase() === value.toLowerCase())) {
+      customs[pool].push(value);
+      customs[pool].sort((a, b) => a.localeCompare(b));
+      saveCustoms();
+    }
+  }
+
+  const CUSTOM_SELECTS = [
+    ['f-type', 'type'], ['f-weight', 'weight'],
+    ['f-color', 'color'], ['f-color2', 'color'], ['f-pattern', 'pattern'],
+  ];
+
+  function refreshCustomOptions() {
+    for (const [selId, pool] of CUSTOM_SELECTS) {
+      const sel = $(selId);
+      const cur = sel.value;
+      sel.querySelectorAll('option[data-custom]').forEach(o => o.remove());
+      for (const v of customs[pool]) {
+        if ([...sel.options].some(o => o.value === v)) continue;
+        const o = document.createElement('option');
+        o.value = o.textContent = v;
+        o.dataset.custom = '1';
+        sel.appendChild(o);
+      }
+      const add = document.createElement('option');
+      add.value = '__new__';
+      add.textContent = '＋ Add new…';
+      add.dataset.custom = '1';
+      sel.appendChild(add);
+      if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+    }
+  }
+
+  function wireCustomSelects() {
+    for (const [selId, pool] of CUSTOM_SELECTS) {
+      const sel = $(selId);
+      sel.addEventListener('change', () => {
+        if (sel.value !== '__new__') return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Name the new ' + pool + '…';
+        input.autocomplete = 'off';
+        sel.classList.add('hidden');
+        sel.insertAdjacentElement('afterend', input);
+        let done = false;
+        const commit = () => {
+          if (done) return;
+          done = true;
+          const v = input.value.trim();
+          input.remove();
+          sel.classList.remove('hidden');
+          if (!v) { sel.value = ''; return; }
+          addCustom(pool, v);
+          refreshCustomOptions();
+          sel.value = v;
+        };
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        });
+        input.addEventListener('blur', commit);
+        input.focus();
+      });
+    }
+  }
   const COLORS = [
     '', 'White', 'Cream / ivory', 'Black', 'Gray', 'Brown / tan', 'Red',
     'Pink', 'Orange', 'Yellow', 'Green', 'Blue', 'Navy', 'Purple',
@@ -522,18 +602,19 @@
     e.preventDefault();
     const id = $('f-id').value || uid();
     const existing = fabrics.find(f => f.id === id);
+    const sv = elId => { const v = $(elId).value; return v === '__new__' ? '' : v; };
     const fabric = {
       id,
       name: $('f-name').value.trim(),
-      type: $('f-type').value,
-      weight: $('f-weight').value,
-      color: $('f-color').value,
-      color2: $('f-color2').value,
+      type: sv('f-type'),
+      weight: sv('f-weight'),
+      color: sv('f-color'),
+      color2: sv('f-color2'),
       colorHex: detectedColors?.colorHex || existing?.colorHex || null,
       color2Hex: detectedColors?.color2Hex || existing?.color2Hex || null,
       palette: (detectedColors?.palette || existing?.palette || []).filter(Boolean),
       tags: $('f-tags').value.split(',').map(t => t.trim()).filter(Boolean),
-      pattern: $('f-pattern').value,
+      pattern: sv('f-pattern'),
       yards: Number($('f-yards').value) || 0,
       width: $('f-width').value ? Number($('f-width').value) : null,
       fiber: $('f-fiber').value.trim(),
@@ -733,7 +814,7 @@
   }
 
   function exportStash() {
-    const blob = new Blob([JSON.stringify({ version: 2, fabrics, threads: ownedThreads }, null, 2)],
+    const blob = new Blob([JSON.stringify({ version: 2, fabrics, threads: ownedThreads, customs }, null, 2)],
       { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -751,6 +832,14 @@
       const valid = list.filter(f => f && f.id && f.name !== undefined);
       await DB.putMany(valid);
       fabrics = await DB.getAll();
+      if (data.customs && typeof data.customs === 'object') {
+        for (const k of Object.keys(customs)) {
+          for (const v of (Array.isArray(data.customs[k]) ? data.customs[k] : [])) {
+            if (typeof v === 'string' && v.trim()) addCustom(k, v.trim());
+          }
+        }
+        refreshCustomOptions();
+      }
       if (Array.isArray(data.threads)) {
         for (const t of data.threads) {
           if (t && t.id && t.brand && t.code) await DB.putThread(t);
@@ -774,10 +863,12 @@
     $('f-color2').innerHTML = colorOpts;
     $('t-brand').innerHTML = THREADS.BRANDS.map(b =>
       `<option value="${esc(b.name)}">${esc(brandShort(b.name))}</option>`).join('');
+    refreshCustomOptions();
   }
 
   async function init() {
     populateSelects();
+    wireCustomSelects();
     try {
       fabrics = await DB.getAll();
       ownedThreads = await DB.getThreads();
