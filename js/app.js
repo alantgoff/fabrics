@@ -1,5 +1,6 @@
 /* Fabric Stash — main app logic (vanilla JS, no dependencies). */
 (() => {
+  const APP_VERSION = 'v6';
   const COLORS = [
     '', 'White', 'Cream / ivory', 'Black', 'Gray', 'Brown / tan', 'Red',
     'Pink', 'Orange', 'Yellow', 'Green', 'Blue', 'Navy', 'Purple',
@@ -230,7 +231,7 @@
     $('f-location').value = fabric?.location || '';
     $('f-notes').value = fabric?.notes || '';
     updatePhotoPreview();
-    renderPaletteRow(detectedColors?.palette);
+    renderPaletteRow();
     renderFormThreadRow(fabric?.colorHex || null);
     $('detect-chip').classList.add('hidden');
     $('delete-fabric').classList.toggle('hidden', !fabric);
@@ -456,19 +457,28 @@
       $('f-type').value = det.material;
       applied.push('type');
     }
-    renderPaletteRow(detectedColors.palette);
-    renderFormThreadRow(det.primary?.hex);
+    renderPaletteRow();
+    renderFormThreadRow(detectedColors.colorHex);
     chip.classList.remove('hidden');
     chip.textContent = 'Photo analysis: ' + det.summary
       + (applied.length ? ' — filled in ' + applied.join(' & ') + ' (edit if wrong)' : '');
   }
 
-  function renderPaletteRow(palette) {
+  /* Editable swatch circles in the form: detected colors can be corrected
+   * by tapping, or set by hand on fabrics without a photo. */
+  function renderPaletteRow() {
     const row = $('palette-row');
-    if (!palette || !palette.length) { row.classList.add('hidden'); return; }
+    const dc = detectedColors || {};
+    const entries = [
+      ['Primary color', dc.colorHex],
+      ['Secondary color', dc.color2Hex],
+    ];
+    if ((dc.palette || []).length > 2 && dc.palette[2]) entries.push(['Accent color', dc.palette[2]]);
     row.classList.remove('hidden');
-    row.innerHTML = '<span class="lbl">Detected palette:</span>'
-      + palette.map(hx => `<span class="swatch" style="background:${esc(hx)}" title="${esc(hx)}"></span>`).join('');
+    row.innerHTML = '<span class="lbl">Colors — tap to edit:</span>'
+      + entries.map(([label, hx], i) =>
+        `<input type="color" class="swatch-edit${hx ? '' : ' unset'}" data-slot="${i}"
+          value="${esc(hx || '#c9c1bb')}" title="${label}" aria-label="${label}">`).join('');
   }
 
   function processPhoto(file) {
@@ -503,7 +513,7 @@
       color2: $('f-color2').value,
       colorHex: detectedColors?.colorHex || existing?.colorHex || null,
       color2Hex: detectedColors?.color2Hex || existing?.color2Hex || null,
-      palette: detectedColors?.palette || existing?.palette || [],
+      palette: (detectedColors?.palette || existing?.palette || []).filter(Boolean),
       tags: $('f-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       pattern: $('f-pattern').value,
       yards: Number($('f-yards').value) || 0,
@@ -774,6 +784,52 @@
       renderThreadDrawer();
     });
     $('t-add').addEventListener('click', addThreadManually);
+
+    // manual edits to the color swatch circles
+    $('palette-row').addEventListener('input', e => {
+      const el = e.target.closest('.swatch-edit');
+      if (!el) return;
+      if (!detectedColors) detectedColors = { colorHex: null, color2Hex: null, palette: [] };
+      if (!Array.isArray(detectedColors.palette)) detectedColors.palette = [];
+      const slot = +el.dataset.slot;
+      const hex = el.value;
+      el.classList.remove('unset');
+      if (slot === 0) { detectedColors.colorHex = hex; detectedColors.palette[0] = hex; }
+      else if (slot === 1) { detectedColors.color2Hex = hex; detectedColors.palette[1] = hex; }
+      else { detectedColors.palette[slot] = hex; }
+      renderFormThreadRow(detectedColors.colorHex);
+    });
+
+    // manual update check
+    $('app-version').textContent = APP_VERSION;
+    $('update-btn').addEventListener('click', async () => {
+      const status = $('update-status');
+      if (!('serviceWorker' in navigator)) {
+        status.textContent = 'This copy updates itself — nothing to do here.';
+        return;
+      }
+      status.textContent = 'Checking…';
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) {
+          status.textContent = 'This copy updates itself — nothing to do here.';
+          return;
+        }
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!reloaded) { reloaded = true; location.reload(); }
+        });
+        await reg.update();
+        if (reg.installing || reg.waiting) {
+          status.textContent = 'Update found — installing…';
+          setTimeout(() => { if (!reloaded) { reloaded = true; location.reload(); } }, 5000);
+        } else {
+          status.textContent = `You're on the latest version (${APP_VERSION}) ✔`;
+        }
+      } catch {
+        status.textContent = 'Could not check from here — this copy updates itself when online.';
+      }
+    });
 
     document.querySelectorAll('.tab[data-view]').forEach(t =>
       t.addEventListener('click', () => showView(t.dataset.view)));

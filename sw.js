@@ -1,5 +1,7 @@
-/* Offline cache — the whole app shell works with no connection. */
-const CACHE = 'fabric-stash-v5';
+/* Offline cache — the whole app shell works with no connection.
+ * Page loads are network-first (fresh app when online, cache offline);
+ * other assets are cache-first and refresh when the cache version bumps. */
+const CACHE = 'fabric-stash-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -28,6 +30,24 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put('./index.html', copy));
+          }
+          return res;
+        })
+        .catch(() =>
+          caches.match(e.request, { ignoreSearch: true })
+            .then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(cached =>
       cached ||
