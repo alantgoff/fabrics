@@ -1,6 +1,6 @@
 /* Fabric Stash — main app logic (vanilla JS, no dependencies). */
 (() => {
-  const APP_VERSION = 'v8';
+  const APP_VERSION = 'v9';
 
   /* ---------- custom field options ----------
    * User-created values for the dropdown fields, shared across fabrics.
