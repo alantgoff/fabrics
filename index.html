@@ -50,8 +50,12 @@
         <input type="hidden" id="f-id">
         <div class="photo-picker">
           <img id="f-photo-preview" class="hidden" alt="Fabric photo">
-          <label for="f-photo" id="photo-label" class="photo-label">📷 Add photo</label>
-          <input type="file" id="f-photo" accept="image/*" capture="environment" class="hidden-input">
+          <div class="photo-buttons">
+            <label for="f-photo-camera" class="photo-label">📷 Take photo</label>
+            <label for="f-photo" id="photo-label" class="photo-label">🖼 Choose from Photos</label>
+          </div>
+          <input type="file" id="f-photo-camera" accept="image/*" capture="environment" class="hidden-input">
+          <input type="file" id="f-photo" accept="image/*" class="hidden-input">
           <button type="button" id="remove-photo" class="text-btn hidden">Remove photo</button>
           <div id="detect-chip" class="detect-chip hidden"></div>
         </div>

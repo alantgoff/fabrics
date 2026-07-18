@@ -121,12 +121,12 @@
     if (photoData) {
       img.src = photoData;
       img.classList.remove('hidden');
-      $('photo-label').textContent = '📷 Change photo';
+      $('photo-label').textContent = '🖼 Change photo';
       $('remove-photo').classList.remove('hidden');
     } else {
       img.removeAttribute('src');
       img.classList.add('hidden');
-      $('photo-label').textContent = '📷 Add photo';
+      $('photo-label').textContent = '🖼 Choose from Photos';
       $('remove-photo').classList.add('hidden');
     }
   }
@@ -471,7 +471,7 @@
       if (card) { renderDetail(card.dataset.id); showView('detail'); }
     });
 
-    $('f-photo').addEventListener('change', async e => {
+    const onPhotoPicked = async e => {
       const file = e.target.files[0];
       if (!file) return;
       const chip = $('detect-chip');
@@ -486,7 +486,9 @@
         $('photo-label').textContent = '⚠️ Could not read that photo — try another';
       }
       e.target.value = '';
-    });
+    };
+    $('f-photo').addEventListener('change', onPhotoPicked);
+    $('f-photo-camera').addEventListener('change', onPhotoPicked);
     $('remove-photo').addEventListener('click', () => {
       photoData = null;
       updatePhotoPreview();
