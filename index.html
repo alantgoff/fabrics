@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Fabric Stash">
-  <meta name="theme-color" content="#8b5a7c">
+  <meta name="theme-color" content="#7e4463">
   <title>Fabric Stash</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -14,145 +14,160 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <header class="app-header">
-    <h1 id="header-title">Fabric Stash</h1>
-    <div class="header-stats" id="header-stats"></div>
-  </header>
+<header class="app-header">
+  <h1 id="header-title">Fabric Stash</h1>
+  <div class="header-stats" id="header-stats"></div>
+</header>
 
-  <main id="main-content">
-    <!-- Stash list view -->
-    <section id="view-stash" class="view active">
-      <div class="toolbar">
-        <input type="search" id="search-input" placeholder="Search — try “dusty pink” or “navy floral”" autocomplete="off">
-        <button id="filter-btn" class="icon-btn" title="Filters">⚙︎</button>
+<main id="main-content">
+  <section id="view-stash" class="view active">
+    <div class="toolbar">
+      <input type="search" id="search-input" placeholder="Search — try “dusty pink” or “navy floral”" autocomplete="off">
+      <button id="filter-btn" class="icon-btn" title="Filters" aria-label="Filters">
+        <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2 4.5h13M4.5 8.5h8M7 12.5h3"/></svg>
+      </button>
+    </div>
+    <div id="filter-panel" class="filter-panel hidden">
+      <select id="filter-type"><option value="">All types</option></select>
+      <select id="filter-color"><option value="">All colors</option></select>
+      <select id="sort-by">
+        <option value="dateAdded-desc">Newest first</option>
+        <option value="dateAdded-asc">Oldest first</option>
+        <option value="name-asc">Name A–Z</option>
+        <option value="yards-desc">Most yardage</option>
+        <option value="yards-asc">Least yardage</option>
+      </select>
+      <button id="clear-filters" class="text-btn">Clear</button>
+    </div>
+    <ul id="fabric-list" class="fabric-list"></ul>
+    <p id="empty-state" class="empty-state hidden">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 4h12M6 20h12M8 4v16M16 4v16M8 8h8M8 11h8M8 14h8M8 17h8" opacity="0.9"/></svg>
+      <span class="big">Nothing in the stash yet</span>
+      Tap <strong>+</strong> to add the first fabric —<br>a photo is all it takes to start.
+    </p>
+  </section>
+
+  <section id="view-form" class="view">
+    <form id="fabric-form">
+      <input type="hidden" id="f-id">
+      <div class="photo-picker">
+        <img id="f-photo-preview" class="hidden" alt="Fabric photo">
+        <div class="photo-buttons">
+          <label for="f-photo-camera" class="photo-label">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2L8 5h8l1.5 2h2A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            Take photo
+          </label>
+          <label for="f-photo" id="photo-label" class="photo-label">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="m4 16 5-5 4 4 3-3 4 4"/><circle cx="9.5" cy="9" r="1.2" fill="currentColor" stroke="none"/></svg>
+            Choose from Photos
+          </label>
+        </div>
+        <input type="file" id="f-photo-camera" accept="image/*" capture="environment" class="hidden-input">
+        <input type="file" id="f-photo" accept="image/*" class="hidden-input">
+        <button type="button" id="remove-photo" class="text-btn hidden">Remove photo</button>
+        <div id="detect-chip" class="detect-chip hidden"></div>
       </div>
-      <div id="filter-panel" class="filter-panel hidden">
-        <select id="filter-type"><option value="">All types</option></select>
-        <select id="filter-color"><option value="">All colors</option></select>
-        <select id="sort-by">
-          <option value="dateAdded-desc">Newest first</option>
-          <option value="dateAdded-asc">Oldest first</option>
-          <option value="name-asc">Name A–Z</option>
-          <option value="yards-desc">Most yardage</option>
-          <option value="yards-asc">Least yardage</option>
-        </select>
-        <button id="clear-filters" class="text-btn">Clear</button>
+      <label>Name / description
+        <input type="text" id="f-name" required placeholder="e.g. Rifle Paper floral lawn">
+      </label>
+      <div class="row-2">
+        <label>Type
+          <select id="f-type"></select>
+        </label>
+        <label>Weight
+          <select id="f-weight">
+            <option value="">—</option>
+            <option>Very light</option><option>Light</option><option>Medium</option>
+            <option>Heavy</option><option>Very heavy</option>
+          </select>
+        </label>
       </div>
-      <ul id="fabric-list" class="fabric-list"></ul>
-      <p id="empty-state" class="empty-state hidden">
-        No fabrics yet.<br>Tap <strong>＋</strong> to add the first one to the stash!
-      </p>
-    </section>
-
-    <!-- Add / edit form view -->
-    <section id="view-form" class="view">
-      <form id="fabric-form">
-        <input type="hidden" id="f-id">
-        <div class="photo-picker">
-          <img id="f-photo-preview" class="hidden" alt="Fabric photo">
-          <div class="photo-buttons">
-            <label for="f-photo-camera" class="photo-label">📷 Take photo</label>
-            <label for="f-photo" id="photo-label" class="photo-label">🖼 Choose from Photos</label>
-          </div>
-          <input type="file" id="f-photo-camera" accept="image/*" capture="environment" class="hidden-input">
-          <input type="file" id="f-photo" accept="image/*" class="hidden-input">
-          <button type="button" id="remove-photo" class="text-btn hidden">Remove photo</button>
-          <div id="detect-chip" class="detect-chip hidden"></div>
-        </div>
-        <label>Name / description
-          <input type="text" id="f-name" required placeholder="e.g. Rifle Paper floral lawn">
+      <div class="row-2">
+        <label>Primary color
+          <select id="f-color"></select>
         </label>
-        <div class="row-2">
-          <label>Type
-            <select id="f-type"></select>
-          </label>
-          <label>Weight
-            <select id="f-weight">
-              <option value="">—</option>
-              <option>Very light</option><option>Light</option><option>Medium</option>
-              <option>Heavy</option><option>Very heavy</option>
-            </select>
-          </label>
-        </div>
-        <div class="row-2">
-          <label>Primary color
-            <select id="f-color"></select>
-          </label>
-          <label>Secondary color
-            <select id="f-color2"></select>
-          </label>
-        </div>
-        <div id="palette-row" class="palette-row hidden"></div>
-        <div class="row-2">
-          <label>Pattern
-            <select id="f-pattern">
-              <option value="">—</option>
-              <option>Solid</option><option>Floral</option><option>Stripe</option>
-              <option>Plaid / check</option><option>Polka dot</option><option>Geometric</option>
-              <option>Animal / novelty</option><option>Abstract</option><option>Other</option>
-            </select>
-          </label>
-          <label>Tags
-            <input type="text" id="f-tags" placeholder="e.g. holiday, vintage">
-          </label>
-        </div>
-        <div class="row-2">
-          <label>Yards on hand
-            <input type="number" id="f-yards" min="0" step="0.125" inputmode="decimal" required placeholder="0">
-          </label>
-          <label>Width (inches)
-            <input type="number" id="f-width" min="0" step="0.5" inputmode="decimal" placeholder="44">
-          </label>
-        </div>
-        <div class="row-2">
-          <label>Fiber content
-            <input type="text" id="f-fiber" placeholder="e.g. 100% cotton">
-          </label>
-          <label>Stored in
-            <input type="text" id="f-location" placeholder="e.g. Bin 3">
-          </label>
-        </div>
-        <label>Notes
-          <textarea id="f-notes" rows="3" placeholder="Prewashed? Intended project? Where you bought it…"></textarea>
+        <label>Secondary color
+          <select id="f-color2"></select>
         </label>
-        <div class="form-actions">
-          <button type="button" id="cancel-form" class="btn secondary">Cancel</button>
-          <button type="submit" class="btn primary">Save fabric</button>
-        </div>
-        <button type="button" id="delete-fabric" class="btn danger hidden">Delete fabric</button>
-      </form>
-    </section>
-
-    <!-- Detail view -->
-    <section id="view-detail" class="view">
-      <div id="detail-content"></div>
-    </section>
-
-    <!-- Ideas view -->
-    <section id="view-ideas" class="view">
-      <div id="ideas-content"></div>
-    </section>
-
-    <!-- Settings view -->
-    <section id="view-settings" class="view">
-      <div class="settings">
-        <h2>Backup</h2>
-        <p class="muted">Everything is stored on this phone. Export a backup now and then to keep it safe.</p>
-        <button id="export-btn" class="btn primary">Export stash (JSON)</button>
-        <label class="btn secondary import-label">Import stash
-          <input type="file" id="import-input" accept=".json,application/json" class="hidden-input">
-        </label>
-        <p id="settings-status" class="muted"></p>
       </div>
-    </section>
-  </main>
+      <div id="palette-row" class="palette-row hidden"></div>
+      <div class="row-2">
+        <label>Pattern
+          <select id="f-pattern">
+            <option value="">—</option>
+            <option>Solid</option><option>Floral</option><option>Stripe</option>
+            <option>Plaid / check</option><option>Polka dot</option><option>Geometric</option>
+            <option>Animal / novelty</option><option>Abstract</option><option>Other</option>
+          </select>
+        </label>
+        <label>Tags
+          <input type="text" id="f-tags" placeholder="e.g. holiday, vintage">
+        </label>
+      </div>
+      <div class="row-2">
+        <label>Yards on hand
+          <input type="number" id="f-yards" min="0" step="0.125" inputmode="decimal" required placeholder="0">
+        </label>
+        <label>Width (inches)
+          <input type="number" id="f-width" min="0" step="0.5" inputmode="decimal" placeholder="44">
+        </label>
+      </div>
+      <div class="row-2">
+        <label>Fiber content
+          <input type="text" id="f-fiber" placeholder="e.g. 100% cotton">
+        </label>
+        <label>Stored in
+          <input type="text" id="f-location" placeholder="e.g. Bin 3">
+        </label>
+      </div>
+      <label>Notes
+        <textarea id="f-notes" rows="3" placeholder="Prewashed? Intended project? Where you bought it…"></textarea>
+      </label>
+      <div class="form-actions">
+        <button type="button" id="cancel-form" class="btn secondary">Cancel</button>
+        <button type="submit" class="btn primary">Save fabric</button>
+      </div>
+      <button type="button" id="delete-fabric" class="btn danger hidden">Delete fabric</button>
+    </form>
+  </section>
 
-  <nav class="tab-bar">
-    <button data-view="stash" class="tab active"><span>🧵</span>Stash</button>
-    <button id="add-btn" class="tab add-tab" aria-label="Add fabric"><span class="add-circle">+</span></button>
-    <button data-view="ideas" class="tab"><span>💡</span>Ideas</button>
-    <button data-view="settings" class="tab"><span>⚙️</span>More</button>
-  </nav>
+  <section id="view-detail" class="view">
+    <div id="detail-content"></div>
+  </section>
+
+  <section id="view-ideas" class="view">
+    <div id="ideas-content"></div>
+  </section>
+
+  <section id="view-settings" class="view">
+    <div class="settings">
+      <h2>Backup</h2>
+      <p class="muted">Everything is stored in this browser. Export a backup now and then to keep it
+        safe, or to move the stash to another device.</p>
+      <button id="export-btn" class="btn primary">Export stash (JSON)</button>
+      <label class="btn secondary import-label">Import stash
+        <input type="file" id="import-input" accept=".json,application/json" class="hidden-input">
+      </label>
+      <p id="settings-status" class="muted"></p>
+    </div>
+  </section>
+</main>
+
+<nav class="tab-bar">
+  <button data-view="stash" class="tab">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M7 4h10M7 20h10M9 4v16M15 4v16M9 8h6M9 11.5h6M9 15h6"/></svg>
+    Stash
+  </button>
+  <button id="add-btn" class="tab add-tab" aria-label="Add fabric"><span class="add-circle">+</span></button>
+  <button data-view="ideas" class="tab">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z"/></svg>
+    Ideas
+  </button>
+  <button data-view="settings" class="tab">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+    More
+  </button>
+</nav>
 
   <script src="js/ideas.js"></script>
   <script src="js/db.js"></script>

@@ -1,5 +1,5 @@
 /* Offline cache — the whole app shell works with no connection. */
-const CACHE = 'fabric-stash-v1';
+const CACHE = 'fabric-stash-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   './manifest.webmanifest',
   './icons/icon-180.png',
   './icons/icon-512.png',
+  './fonts/fraunces-latin.woff2',
 ];
 
 self.addEventListener('install', e => {

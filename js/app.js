@@ -29,7 +29,7 @@
       t.classList.toggle('active', t.dataset.view === name));
     const titles = { stash: 'Fabric Stash', form: 'Fabric details', detail: 'Fabric', ideas: 'Project ideas', settings: 'More' };
     $('header-title').textContent = titles[name] || 'Fabric Stash';
-    window.scrollTo(0, 0);
+    $('main-content').scrollTo(0, 0);
     if (name === 'ideas') renderIdeas();
   }
 
@@ -179,7 +179,7 @@
       <li class="fabric-card" data-id="${f.id}">
         ${f.photo
           ? `<img class="fabric-thumb" src="${f.photo}" alt="">`
-          : `<div class="fabric-thumb">🧵</div>`}
+          : `<div class="fabric-thumb"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7 4h10M7 20h10M9 4v16M15 4v16M9 8h6M9 11.5h6M9 15h6"/></svg></div>`}
         <div class="fabric-info">
           <h3>${esc(f.name)}</h3>
           <div class="fabric-meta">${esc([f.type, f.color, f.pattern].filter(Boolean).join(' · '))}
@@ -431,7 +431,7 @@
     }
     renderPaletteRow(detectedColors.palette);
     chip.classList.remove('hidden');
-    chip.textContent = '🔎 Photo analysis: ' + det.summary
+    chip.textContent = 'Photo analysis: ' + det.summary
       + (applied.length ? ' — filled in ' + applied.join(' & ') + ' (edit if wrong)' : '');
   }
 
@@ -525,9 +525,9 @@
       ${f.notes ? `<div class="notes-block">${esc(f.notes)}</div>` : ''}
       ${s.now.length ? `
         <div class="idea-fabric">
-          <h3>💡 Enough yardage for:</h3>
+          <h3>Enough yardage for</h3>
           <div class="idea-chips">
-            ${s.now.map(p => `<span class="idea-chip">${p.name} <span class="yd">~${p.yards} yd</span></span>`).join('')}
+            ${s.now.map(p => `<span class="idea-chip now">${p.name} <span class="yd">~${p.yards} yd</span></span>`).join('')}
           </div>
         </div>` : ''}
       <button class="btn secondary" id="back-to-stash">← Back to stash</button>
@@ -561,15 +561,15 @@
           <div class="idea-fabric" data-id="${f.id}">
             <h3>${esc(f.name)} <small>· ${fmtYards(f.yards)} of ${esc(f.type || 'fabric')}</small></h3>
             <div class="idea-chips">
-              ${s.now.map(p => `<span class="idea-chip">✅ ${p.name} <span class="yd">~${p.yards} yd</span></span>`).join('')}
-              ${s.almost.map(p => `<span class="idea-chip">🛍 ${p.name} <span class="yd">needs ~${p.yards} yd</span></span>`).join('')}
+              ${s.now.map(p => `<span class="idea-chip now">${p.name} <span class="yd">~${p.yards} yd</span></span>`).join('')}
+              ${s.almost.map(p => `<span class="idea-chip almost">${p.name} <span class="yd">needs ~${p.yards} yd</span></span>`).join('')}
             </div>
           </div>`;
       }).join('');
     el.innerHTML = `
-      <p class="ideas-intro">Based on each fabric's type and yardage —
-      ✅ means there's enough on hand, 🛍 means it's within a yard of enough
-      (a top-up trip to the fabric store!). Tap a fabric to open it.</p>
+      <p class="ideas-intro">Matched to each fabric's type and yardage —
+      filled chips have enough on hand; dashed chips are within a yard of
+      enough (a top-up trip to the fabric store!). Tap a fabric to open it.</p>
       ${sections || '<p class="ideas-intro">No suggestions yet — add fabric types and yardage to get ideas.</p>'}`;
     el.querySelectorAll('.idea-fabric').forEach(div => {
       div.addEventListener('click', () => { renderDetail(div.dataset.id); showView('detail'); });
@@ -672,7 +672,7 @@
       if (!file) return;
       const chip = $('detect-chip');
       chip.classList.remove('hidden');
-      chip.innerHTML = '<span class="spin">🧵</span> Analyzing photo…';
+      chip.innerHTML = '<span class="spin"></span> Analyzing photo…';
       try {
         photoData = await processPhoto(file);
         updatePhotoPreview();
