@@ -97,6 +97,8 @@ body {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* clear the fixed tab bar */
+  padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
 }
 
 .view { display: none; padding: 4px 16px 24px; }
@@ -402,11 +404,26 @@ body {
 .import-label { text-align: center; cursor: pointer; }
 
 /* ---------- tab bar ---------- */
+/* Fixed to the viewport bottom instead of sitting in the flex column —
+ * mobile browsers disagree with 100%/100dvh about where the bottom is,
+ * which left the bar floating above a gap. */
 .tab-bar {
-  flex-shrink: 0;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  max-width: 560px;
+  margin: 0 auto;
+  z-index: 10;
   display: flex; justify-content: space-around; align-items: center;
   background: var(--card); border-top: 1.5px dashed var(--border);
-  padding: 10px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 15px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+}
+/* Paint the region below the bar (home-indicator area / any viewport gap)
+ * in the bar's own background so nothing shows through beneath it. */
+.tab-bar::after {
+  content: "";
+  position: absolute;
+  top: 100%; left: 0; right: 0; height: 50vh;
+  background: var(--card);
 }
 .tab {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
