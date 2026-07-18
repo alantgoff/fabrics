@@ -111,6 +111,7 @@
     $('f-location').value = fabric?.location || '';
     $('f-notes').value = fabric?.notes || '';
     updatePhotoPreview();
+    $('detect-chip').classList.add('hidden');
     $('delete-fabric').classList.toggle('hidden', !fabric);
     showView('form');
   }
@@ -128,6 +129,99 @@
       $('photo-label').textContent = '📷 Add photo';
       $('remove-photo').classList.add('hidden');
     }
+  }
+
+  /* On-device photo analysis: samples pixels, clusters hues, and suggests
+   * main color and solid-vs-print. Only fills fields still blank. */
+  function analyzeFabricPhoto(dataUrl) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const N = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = N; canvas.height = N;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, N, N);
+        const data = ctx.getImageData(0, 0, N, N).data;
+
+        const hueBuckets = {};
+        let lightSum = 0, lightSqSum = 0, count = 0;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255;
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          const l = (max + min) / 2;
+          const d = max - min;
+          const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+          let h = 0;
+          if (d > 0) {
+            if (max === r) h = ((g - b) / d) % 6;
+            else if (max === g) h = (b - r) / d + 2;
+            else h = (r - g) / d + 4;
+            h = (h * 60 + 360) % 360;
+          }
+          lightSum += l; lightSqSum += l * l; count++;
+
+          let name;
+          if (s < 0.14) {
+            name = l > 0.87 ? 'White' : l < 0.16 ? 'Black' : 'Gray';
+          } else if (h < 15 || h >= 345) {
+            name = l > 0.62 ? 'Pink' : 'Red';
+          } else if (h < 45) {
+            name = (s < 0.45 || l < 0.35) ? 'Brown / tan' : 'Orange';
+          } else if (h < 68) {
+            name = l > 0.82 && s < 0.4 ? 'Cream / ivory' : 'Yellow';
+          } else if (h < 160) {
+            name = 'Green';
+          } else if (h < 195) {
+            name = 'Teal';
+          } else if (h < 255) {
+            name = l < 0.28 ? 'Navy' : 'Blue';
+          } else if (h < 300) {
+            name = 'Purple';
+          } else {
+            name = 'Pink';
+          }
+          hueBuckets[name] = (hueBuckets[name] || 0) + 1;
+        }
+
+        const ranked = Object.entries(hueBuckets).sort((a, b) => b[1] - a[1]);
+        const topShare = ranked[0][1] / count;
+        const strong = ranked.filter(([, n]) => n / count > 0.15);
+        const meanL = lightSum / count;
+        const stdL = Math.sqrt(Math.max(0, lightSqSum / count - meanL * meanL));
+
+        const multicolor = strong.length >= 3;
+        const color = multicolor ? 'Multicolor / print' : ranked[0][0];
+        const pattern = (!multicolor && topShare > 0.82 && stdL < 0.09) ? 'Solid' : '';
+
+        const parts = [color === 'Multicolor / print'
+          ? 'multicolor print (' + strong.map(([n]) => n.split(' ')[0].toLowerCase()).join(', ') + ')'
+          : ('mainly ' + ranked[0][0].toLowerCase())];
+        if (pattern) parts.push('looks solid');
+        else if (!multicolor && topShare < 0.7) parts.push('looks patterned');
+        resolve({ color, pattern, summary: parts.join(' · ') });
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
+  function applyDetection(det) {
+    const chip = $('detect-chip');
+    if (!det) { chip.classList.add('hidden'); return; }
+    const applied = [];
+    if (!$('f-color').value && det.color) {
+      $('f-color').value = det.color;
+      applied.push('color');
+    }
+    if (!$('f-pattern').value && det.pattern) {
+      $('f-pattern').value = det.pattern;
+      applied.push('pattern');
+    }
+    chip.classList.remove('hidden');
+    chip.textContent = '🔎 Photo analysis: ' + det.summary
+      + (applied.length ? ' — filled in ' + applied.join(' & ') + ' (edit if wrong)' : '');
   }
 
   /* Downscale photos so IndexedDB stays small and the list stays fast. */
@@ -333,15 +427,23 @@
     $('f-photo').addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file) return;
+      const chip = $('detect-chip');
+      chip.classList.remove('hidden');
+      chip.innerHTML = '<span class="spin">🧵</span> Analyzing photo…';
       try {
         photoData = await processPhoto(file);
         updatePhotoPreview();
-      } catch { alert('Could not read that photo.'); }
+        applyDetection(await analyzeFabricPhoto(photoData));
+      } catch {
+        chip.classList.add('hidden');
+        $('photo-label').textContent = '⚠️ Could not read that photo — try another';
+      }
       e.target.value = '';
     });
     $('remove-photo').addEventListener('click', () => {
       photoData = null;
       updatePhotoPreview();
+      $('detect-chip').classList.add('hidden');
     });
 
     $('export-btn').addEventListener('click', exportStash);

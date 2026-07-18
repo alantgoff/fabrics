@@ -189,6 +189,18 @@ body {
   margin-top: -18px; box-shadow: 0 3px 10px rgba(139, 90, 124, 0.4);
 }
 
+.detect-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 9px 12px; font-size: 0.85rem;
+  color: var(--text); width: 100%;
+}
+.detect-chip .spin { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .detect-chip .spin { animation: none; }
+}
+
 .hidden { display: none !important; }
 
 @media (prefers-color-scheme: dark) {
