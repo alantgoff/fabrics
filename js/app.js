@@ -131,21 +131,24 @@
     }
   }
 
-  /* On-device photo analysis: samples pixels, clusters hues, and suggests
-   * main color and solid-vs-print. Only fills fields still blank. */
+  /* On-device photo analysis: samples pixels, clusters hues, and measures
+   * texture (sheen, edge density, contrast) to suggest main color,
+   * solid-vs-print, and a best-guess material. Only fills fields still blank. */
   function analyzeFabricPhoto(dataUrl) {
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
-        const N = 64;
+        const N = 96;
         const canvas = document.createElement('canvas');
         canvas.width = N; canvas.height = N;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, N, N);
         const data = ctx.getImageData(0, 0, N, N).data;
 
-        const hueBuckets = {};
-        let lightSum = 0, lightSqSum = 0, count = 0;
+        const hueBuckets = {}; // named color -> pixel count
+        const lum = new Float32Array(N * N);
+        let lightSum = 0, lightSqSum = 0, satSum = 0, highlightCount = 0;
+        let blueCount = 0, count = 0;
 
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255;
@@ -160,7 +163,11 @@
             else h = (r - g) / d + 4;
             h = (h * 60 + 360) % 360;
           }
-          lightSum += l; lightSqSum += l * l; count++;
+          lum[count] = l;
+          lightSum += l; lightSqSum += l * l; satSum += s;
+          if (l > 0.92) highlightCount++;
+          if (h >= 195 && h < 255 && s >= 0.12) blueCount++;
+          count++;
 
           let name;
           if (s < 0.14) {
@@ -185,22 +192,58 @@
           hueBuckets[name] = (hueBuckets[name] || 0) + 1;
         }
 
+        // texture: Sobel edge density over the luminance field
+        let edgeCount = 0, edgeTotal = 0;
+        for (let y = 1; y < N - 1; y++) {
+          for (let x = 1; x < N - 1; x++) {
+            const i = y * N + x;
+            const gx = (lum[i - N + 1] + 2 * lum[i + 1] + lum[i + N + 1])
+                     - (lum[i - N - 1] + 2 * lum[i - 1] + lum[i + N - 1]);
+            const gy = (lum[i + N - 1] + 2 * lum[i + N] + lum[i + N + 1])
+                     - (lum[i - N - 1] + 2 * lum[i - N] + lum[i - N + 1]);
+            if (Math.sqrt(gx * gx + gy * gy) > 0.28) edgeCount++;
+            edgeTotal++;
+          }
+        }
+        const edgeDensity = edgeCount / edgeTotal;
+        const sheen = highlightCount / count;
+        const meanSat = satSum / count;
+        const meanL = lightSum / count;
+        const stdL = Math.sqrt(Math.max(0, lightSqSum / count - meanL * meanL));
+        const blueShare = blueCount / count;
+
         const ranked = Object.entries(hueBuckets).sort((a, b) => b[1] - a[1]);
         const topShare = ranked[0][1] / count;
         const strong = ranked.filter(([, n]) => n / count > 0.15);
-        const meanL = lightSum / count;
-        const stdL = Math.sqrt(Math.max(0, lightSqSum / count - meanL * meanL));
 
         const multicolor = strong.length >= 3;
         const color = multicolor ? 'Multicolor / print' : ranked[0][0];
+        // very dominant color + smooth lightness → probably a solid
         const pattern = (!multicolor && topShare > 0.82 && stdL < 0.09) ? 'Solid' : '';
+
+        // material guess, most-distinctive signals first
+        let material = '', why = '';
+        if (sheen > 0.06 && edgeDensity < 0.15 && !multicolor) {
+          material = 'Satin / silky'; why = 'shiny highlights on a smooth surface';
+        } else if (blueShare > 0.5 && meanSat > 0.12 && meanSat < 0.62 && meanL < 0.6 && !multicolor) {
+          material = 'Denim / twill'; why = 'that classic muted denim blue';
+        } else if (edgeDensity > 0.45 && stdL > 0.22) {
+          material = 'Lace'; why = 'very open, high-contrast texture';
+        } else if (multicolor) {
+          material = 'Quilting cotton'; why = 'busy multicolor print, the quilting-cotton signature';
+        } else if (edgeDensity < 0.06 && stdL < 0.08 && sheen < 0.03) {
+          material = 'Cotton knit / jersey'; why = 'smooth matte surface';
+        } else if (edgeDensity > 0.12 && edgeDensity <= 0.45 && meanSat < 0.38) {
+          material = 'Linen'; why = 'visible weave texture in a muted color';
+        }
 
         const parts = [color === 'Multicolor / print'
           ? 'multicolor print (' + strong.map(([n]) => n.split(' ')[0].toLowerCase()).join(', ') + ')'
           : ('mainly ' + ranked[0][0].toLowerCase())];
         if (pattern) parts.push('looks solid');
         else if (!multicolor && topShare < 0.7) parts.push('looks patterned');
-        resolve({ color, pattern, summary: parts.join(' · ') });
+        if (material) parts.push('maybe ' + material.toLowerCase() + ' (' + why + ')');
+        resolve({ color, pattern, material, summary: parts.join(' · ') });
       };
       img.onerror = () => resolve(null);
       img.src = dataUrl;
@@ -218,6 +261,10 @@
     if (!$('f-pattern').value && det.pattern) {
       $('f-pattern').value = det.pattern;
       applied.push('pattern');
+    }
+    if (!$('f-type').value && det.material) {
+      $('f-type').value = det.material;
+      applied.push('type');
     }
     chip.classList.remove('hidden');
     chip.textContent = '🔎 Photo analysis: ' + det.summary
