@@ -23,7 +23,7 @@
     <!-- Stash list view -->
     <section id="view-stash" class="view active">
       <div class="toolbar">
-        <input type="search" id="search-input" placeholder="Search fabrics…" autocomplete="off">
+        <input type="search" id="search-input" placeholder="Search — try “dusty pink” or “navy floral”" autocomplete="off">
         <button id="filter-btn" class="icon-btn" title="Filters">⚙︎</button>
       </div>
       <div id="filter-panel" class="filter-panel hidden">
@@ -75,9 +75,15 @@
           </label>
         </div>
         <div class="row-2">
-          <label>Main color
+          <label>Primary color
             <select id="f-color"></select>
           </label>
+          <label>Secondary color
+            <select id="f-color2"></select>
+          </label>
+        </div>
+        <div id="palette-row" class="palette-row hidden"></div>
+        <div class="row-2">
           <label>Pattern
             <select id="f-pattern">
               <option value="">—</option>
@@ -85,6 +91,9 @@
               <option>Plaid / check</option><option>Polka dot</option><option>Geometric</option>
               <option>Animal / novelty</option><option>Abstract</option><option>Other</option>
             </select>
+          </label>
+          <label>Tags
+            <input type="text" id="f-tags" placeholder="e.g. holiday, vintage">
           </label>
         </div>
         <div class="row-2">
@@ -140,7 +149,7 @@
 
   <nav class="tab-bar">
     <button data-view="stash" class="tab active"><span>🧵</span>Stash</button>
-    <button id="add-btn" class="tab add-tab"><span class="add-circle">＋</span></button>
+    <button id="add-btn" class="tab add-tab" aria-label="Add fabric"><span class="add-circle">+</span></button>
     <button data-view="ideas" class="tab"><span>💡</span>Ideas</button>
     <button data-view="settings" class="tab"><span>⚙️</span>More</button>
   </nav>

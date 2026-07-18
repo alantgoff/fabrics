@@ -5,16 +5,16 @@
     'Pink', 'Orange', 'Yellow', 'Green', 'Blue', 'Navy', 'Purple',
     'Teal', 'Multicolor / print',
   ];
-  const LOW_YARDS = 1; // below this, yardage shows in red
+  const LOW_YARDS = 1;
 
   const $ = id => document.getElementById(id);
   const views = ['stash', 'form', 'detail', 'ideas', 'settings'];
 
   let fabrics = [];
   let currentDetailId = null;
-  let photoData = null; // data URL for the photo being edited
+  let photoData = null;
+  let detectedColors = null; // hexes from the last photo analysis
 
-  /* ---------- helpers ---------- */
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtYards = y => {
@@ -33,7 +33,6 @@
     if (name === 'ideas') renderIdeas();
   }
 
-  /* ---------- stash list ---------- */
   function renderStats() {
     const total = fabrics.reduce((s, f) => s + (Number(f.yards) || 0), 0);
     $('header-stats').textContent = fabrics.length
@@ -41,17 +40,124 @@
       : '';
   }
 
+  /* ---------- natural-language color search ----------
+   * "dusty pink", "light blue floral" — color words match the hex palette
+   * detected from each fabric's photo (and the named color fields);
+   * remaining words match the text fields. */
+  const COLOR_WORDS = {
+    red: [0, 0.75, 0.45], crimson: [345, 0.8, 0.4], maroon: [345, 0.6, 0.25],
+    burgundy: [345, 0.55, 0.25], pink: [340, 0.65, 0.75], blush: [350, 0.5, 0.82],
+    rose: [340, 0.6, 0.6], magenta: [310, 0.8, 0.5], fuchsia: [315, 0.85, 0.55],
+    orange: [28, 0.85, 0.55], rust: [18, 0.65, 0.4], coral: [10, 0.8, 0.65],
+    peach: [28, 0.7, 0.8], yellow: [52, 0.85, 0.6], gold: [45, 0.7, 0.5],
+    mustard: [48, 0.7, 0.45], green: [120, 0.5, 0.4], olive: [75, 0.45, 0.35],
+    sage: [110, 0.2, 0.6], mint: [150, 0.45, 0.75], emerald: [145, 0.6, 0.4],
+    forest: [130, 0.45, 0.25], teal: [178, 0.55, 0.35], turquoise: [174, 0.6, 0.5],
+    aqua: [185, 0.6, 0.6], cyan: [190, 0.7, 0.55], blue: [220, 0.65, 0.5],
+    navy: [225, 0.6, 0.2], cobalt: [218, 0.7, 0.4], sky: [205, 0.6, 0.7],
+    denim: [218, 0.4, 0.4], purple: [275, 0.55, 0.45], violet: [270, 0.6, 0.55],
+    lavender: [265, 0.45, 0.78], lilac: [283, 0.4, 0.75], plum: [300, 0.4, 0.35],
+    brown: [25, 0.45, 0.3], tan: [34, 0.4, 0.65], beige: [38, 0.3, 0.8],
+    cream: [45, 0.4, 0.9], ivory: [48, 0.3, 0.93], white: [0, 0, 0.95],
+    black: [0, 0, 0.08], gray: [0, 0, 0.5], grey: [0, 0, 0.5],
+    charcoal: [0, 0, 0.22], silver: [0, 0, 0.75],
+  };
+  const COLOR_MODIFIERS = {
+    light: { dl: +0.18 }, pale: { dl: +0.22, ds: -0.15 }, pastel: { dl: +0.22, ds: -0.2 },
+    soft: { dl: +0.1, ds: -0.15 }, dark: { dl: -0.18 }, deep: { dl: -0.15, ds: +0.1 },
+    dusty: { ds: -0.3 }, muted: { ds: -0.3 }, bright: { ds: +0.2 }, vivid: { ds: +0.25 },
+    hot: { ds: +0.25, dl: +0.05 }, neon: { ds: +0.3, dl: +0.1 },
+  };
+
+  function hexToHsl(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return null;
+    const v = parseInt(m[1], 16);
+    const r = ((v >> 16) & 255) / 255, g = ((v >> 8) & 255) / 255, b = (v & 255) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2, d = max - min;
+    const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+    let h = 0;
+    if (d > 0) {
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h = (h * 60 + 360) % 360;
+    }
+    return [h, s, l];
+  }
+
+  /* Split a query into color targets and plain text terms. */
+  function parseQuery(q) {
+    const words = q.split(/\s+/).filter(Boolean);
+    const colorTargets = [], textTerms = [];
+    let pendingMod = null;
+    for (const w of words) {
+      if (COLOR_MODIFIERS[w]) { pendingMod = w; continue; }
+      if (COLOR_WORDS[w]) {
+        let [h, s, l] = COLOR_WORDS[w];
+        if (pendingMod) {
+          const m = COLOR_MODIFIERS[pendingMod];
+          s = Math.max(0, Math.min(1, s + (m.ds || 0)));
+          l = Math.max(0, Math.min(1, l + (m.dl || 0)));
+        }
+        colorTargets.push({ word: w, h, s, l, strict: !!pendingMod });
+        pendingMod = null;
+      } else {
+        if (pendingMod) textTerms.push(pendingMod);
+        pendingMod = null;
+        textTerms.push(w);
+      }
+    }
+    if (pendingMod) textTerms.push(pendingMod);
+    return { colorTargets, textTerms };
+  }
+
+  function fabricMatchesColor(f, t) {
+    // named-color fallback so hand-entered fabrics still match —
+    // but not for modified queries ("dusty blue" must check actual hexes)
+    if (!t.strict) {
+      const names = [f.color, f.color2].join(' ').toLowerCase();
+      if (names.includes(t.word)) return true;
+    }
+    const hexes = [f.colorHex, f.color2Hex, ...(f.palette || [])].filter(Boolean);
+    for (const hx of hexes) {
+      const hsl = hexToHsl(hx);
+      if (!hsl) continue;
+      const [h, s, l] = hsl;
+      const neutralTarget = t.s < 0.16;
+      if (neutralTarget) {
+        if (s < 0.22 && Math.abs(l - t.l) < (t.strict ? 0.16 : 0.24)) return true;
+        continue;
+      }
+      // near-neutrals (including near-white/black) can't match a hued query
+      if (s < 0.18 || l > 0.92 || l < 0.08) continue;
+      let dh = Math.abs(h - t.h);
+      if (dh > 180) dh = 360 - dh;
+      const lTol = t.strict ? 0.18 : 0.3;
+      const sTol = t.strict ? 0.32 : 0.5;
+      if (dh <= 32 && Math.abs(l - t.l) <= lTol && Math.abs(s - t.s) <= sTol) return true;
+    }
+    return false;
+  }
+
   function getFiltered() {
     const q = $('search-input').value.trim().toLowerCase();
     const type = $('filter-type').value;
     const color = $('filter-color').value;
+    const parsed = q ? parseQuery(q) : null;
     let list = fabrics.filter(f => {
       if (type && f.type !== type) return false;
       if (color && f.color !== color) return false;
-      if (q) {
-        const hay = [f.name, f.type, f.color, f.pattern, f.fiber, f.location, f.notes]
-          .join(' ').toLowerCase();
-        if (!hay.includes(q)) return false;
+      if (parsed) {
+        const hay = [f.name, f.type, f.color, f.color2, f.pattern, f.fiber,
+          f.location, f.notes, ...(f.tags || [])].join(' ').toLowerCase();
+        for (const t of parsed.colorTargets) {
+          if (!fabricMatchesColor(f, t)) return false;
+        }
+        for (const term of parsed.textTerms) {
+          if (!hay.includes(term)) return false;
+        }
       }
       return true;
     });
@@ -76,7 +182,10 @@
           : `<div class="fabric-thumb">🧵</div>`}
         <div class="fabric-info">
           <h3>${esc(f.name)}</h3>
-          <div class="fabric-meta">${esc([f.type, f.color, f.pattern].filter(Boolean).join(' · '))}</div>
+          <div class="fabric-meta">${esc([f.type, f.color, f.pattern].filter(Boolean).join(' · '))}
+            ${(f.palette || []).length ? `<span class="card-swatches">${f.palette.slice(0, 3).map(hx =>
+              `<span class="swatch sm" style="background:${esc(hx)}"></span>`).join('')}</span>` : ''}
+          </div>
         </div>
         <div class="fabric-yards ${Number(f.yards) < LOW_YARDS ? 'low' : ''}">${fmtYards(f.yards)}</div>
       </li>`).join('');
@@ -95,15 +204,21 @@
     keep($('filter-color'), [...new Set(fabrics.map(f => f.color).filter(Boolean))].sort(), 'All colors');
   }
 
-  /* ---------- form ---------- */
   function openForm(fabric) {
     $('fabric-form').reset();
     photoData = fabric?.photo || null;
+    detectedColors = fabric ? {
+      colorHex: fabric.colorHex || null,
+      color2Hex: fabric.color2Hex || null,
+      palette: fabric.palette || [],
+    } : null;
     $('f-id').value = fabric?.id || '';
     $('f-name').value = fabric?.name || '';
     $('f-type').value = fabric?.type || '';
     $('f-weight').value = fabric?.weight || '';
     $('f-color').value = fabric?.color || '';
+    $('f-color2').value = fabric?.color2 || '';
+    $('f-tags').value = (fabric?.tags || []).join(', ');
     $('f-pattern').value = fabric?.pattern || '';
     $('f-yards').value = fabric?.yards ?? '';
     $('f-width').value = fabric?.width ?? '';
@@ -111,6 +226,7 @@
     $('f-location').value = fabric?.location || '';
     $('f-notes').value = fabric?.notes || '';
     updatePhotoPreview();
+    renderPaletteRow(detectedColors?.palette);
     $('detect-chip').classList.add('hidden');
     $('delete-fabric').classList.toggle('hidden', !fabric);
     showView('form');
@@ -131,9 +247,12 @@
     }
   }
 
-  /* On-device photo analysis: samples pixels, clusters hues, and measures
-   * texture (sheen, edge density, contrast) to suggest main color,
-   * solid-vs-print, and a best-guess material. Only fills fields still blank. */
+  /* ---------- photo attribute agent ----------
+   * On-device analysis of the uploaded photo: samples the pixels, clusters
+   * hues, and measures texture (sheen, edge density, contrast) to suggest
+   * the main color, solid-vs-print, and a best-guess material category.
+   * Suggestions only fill fields that are still blank, and everything
+   * stays editable — material from a photo is always a rough guess. */
   function analyzeFabricPhoto(dataUrl) {
     return new Promise(resolve => {
       const img = new Image();
@@ -146,6 +265,7 @@
         const data = ctx.getImageData(0, 0, N, N).data;
 
         const hueBuckets = {}; // named color -> pixel count
+        const bucketRgb = {};  // named color -> [rSum, gSum, bSum]
         const lum = new Float32Array(N * N);
         let lightSum = 0, lightSqSum = 0, satSum = 0, highlightCount = 0;
         let blueCount = 0, count = 0;
@@ -190,10 +310,12 @@
             name = 'Pink';
           }
           hueBuckets[name] = (hueBuckets[name] || 0) + 1;
+          const acc = bucketRgb[name] || (bucketRgb[name] = [0, 0, 0]);
+          acc[0] += data[i]; acc[1] += data[i + 1]; acc[2] += data[i + 2];
         }
 
-        // texture: Sobel edge density over the luminance field
-        let edgeCount = 0, edgeTotal = 0;
+        // texture: Sobel edge density + edge direction over the luminance field
+        let edgeCount = 0, edgeTotal = 0, gxDom = 0, gyDom = 0;
         for (let y = 1; y < N - 1; y++) {
           for (let x = 1; x < N - 1; x++) {
             const i = y * N + x;
@@ -201,11 +323,17 @@
                      - (lum[i - N - 1] + 2 * lum[i - 1] + lum[i + N - 1]);
             const gy = (lum[i + N - 1] + 2 * lum[i + N] + lum[i + N + 1])
                      - (lum[i - N - 1] + 2 * lum[i - N] + lum[i - N + 1]);
-            if (Math.sqrt(gx * gx + gy * gy) > 0.28) edgeCount++;
+            if (Math.sqrt(gx * gx + gy * gy) > 0.28) {
+              edgeCount++;
+              const ax = Math.abs(gx), ay = Math.abs(gy);
+              if (ax > 2 * ay) gxDom++;
+              else if (ay > 2 * ax) gyDom++;
+            }
             edgeTotal++;
           }
         }
         const edgeDensity = edgeCount / edgeTotal;
+        const axisShare = edgeCount ? (gxDom + gyDom) / edgeCount : 0;
         const sheen = highlightCount / count;
         const meanSat = satSum / count;
         const meanL = lightSum / count;
@@ -216,10 +344,36 @@
         const topShare = ranked[0][1] / count;
         const strong = ranked.filter(([, n]) => n / count > 0.15);
 
+        const hexOf = name => {
+          const [rs, gs, bs] = bucketRgb[name];
+          const n = hueBuckets[name];
+          return '#' + [rs, gs, bs].map(v =>
+            Math.round(v / n).toString(16).padStart(2, '0')).join('');
+        };
+        const primary = { name: ranked[0][0], hex: hexOf(ranked[0][0]) };
+        const secondary = ranked[1] && ranked[1][1] / count > 0.1
+          ? { name: ranked[1][0], hex: hexOf(ranked[1][0]) } : null;
+        const palette = ranked.slice(0, 3)
+          .filter(([, n]) => n / count > 0.08)
+          .map(([name]) => hexOf(name));
+
         const multicolor = strong.length >= 3;
-        const color = multicolor ? 'Multicolor / print' : ranked[0][0];
-        // very dominant color + smooth lightness → probably a solid
-        const pattern = (!multicolor && topShare > 0.82 && stdL < 0.09) ? 'Solid' : '';
+        const color = multicolor ? 'Multicolor / print' : primary.name;
+
+        // pattern: solid → striped/checked (axis-aligned edges) → organic print
+        const isSolid = !multicolor && topShare > 0.82 && stdL < 0.09;
+        const patterned = multicolor || topShare < 0.7 || stdL >= 0.09;
+        let pattern = '';
+        if (isSolid) {
+          pattern = 'Solid';
+        } else if (patterned && edgeDensity > 0.08 && axisShare > 0.55) {
+          const oneWay = gxDom > 3 * gyDom || gyDom > 3 * gxDom;
+          pattern = oneWay ? 'Stripe' : 'Plaid / check';
+        } else if (patterned && multicolor) {
+          pattern = 'Floral';
+        } else if (patterned && edgeDensity > 0.25) {
+          pattern = 'Geometric';
+        }
 
         // material guess, most-distinctive signals first
         let material = '', why = '';
@@ -239,11 +393,11 @@
 
         const parts = [color === 'Multicolor / print'
           ? 'multicolor print (' + strong.map(([n]) => n.split(' ')[0].toLowerCase()).join(', ') + ')'
-          : ('mainly ' + ranked[0][0].toLowerCase())];
-        if (pattern) parts.push('looks solid');
-        else if (!multicolor && topShare < 0.7) parts.push('looks patterned');
+          : ('mainly ' + primary.name.toLowerCase()
+             + (secondary ? ' with ' + secondary.name.toLowerCase() : ''))];
+        if (pattern) parts.push('looks ' + pattern.toLowerCase());
         if (material) parts.push('maybe ' + material.toLowerCase() + ' (' + why + ')');
-        resolve({ color, pattern, material, summary: parts.join(' · ') });
+        resolve({ color, pattern, material, primary, secondary, palette, summary: parts.join(' · ') });
       };
       img.onerror = () => resolve(null);
       img.src = dataUrl;
@@ -253,10 +407,19 @@
   function applyDetection(det) {
     const chip = $('detect-chip');
     if (!det) { chip.classList.add('hidden'); return; }
+    detectedColors = {
+      colorHex: det.primary?.hex || null,
+      color2Hex: det.secondary?.hex || null,
+      palette: det.palette || [],
+    };
     const applied = [];
     if (!$('f-color').value && det.color) {
       $('f-color').value = det.color;
       applied.push('color');
+    }
+    if (!$('f-color2').value && det.secondary) {
+      $('f-color2').value = det.secondary.name;
+      applied.push('secondary');
     }
     if (!$('f-pattern').value && det.pattern) {
       $('f-pattern').value = det.pattern;
@@ -266,12 +429,20 @@
       $('f-type').value = det.material;
       applied.push('type');
     }
+    renderPaletteRow(detectedColors.palette);
     chip.classList.remove('hidden');
     chip.textContent = '🔎 Photo analysis: ' + det.summary
       + (applied.length ? ' — filled in ' + applied.join(' & ') + ' (edit if wrong)' : '');
   }
 
-  /* Downscale photos so IndexedDB stays small and the list stays fast. */
+  function renderPaletteRow(palette) {
+    const row = $('palette-row');
+    if (!palette || !palette.length) { row.classList.add('hidden'); return; }
+    row.classList.remove('hidden');
+    row.innerHTML = '<span class="lbl">Detected palette:</span>'
+      + palette.map(hx => `<span class="swatch" style="background:${esc(hx)}" title="${esc(hx)}"></span>`).join('');
+  }
+
   function processPhoto(file) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
@@ -301,6 +472,11 @@
       type: $('f-type').value,
       weight: $('f-weight').value,
       color: $('f-color').value,
+      color2: $('f-color2').value,
+      colorHex: detectedColors?.colorHex || existing?.colorHex || null,
+      color2Hex: detectedColors?.color2Hex || existing?.color2Hex || null,
+      palette: detectedColors?.palette || existing?.palette || [],
+      tags: $('f-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       pattern: $('f-pattern').value,
       yards: Number($('f-yards').value) || 0,
       width: $('f-width').value ? Number($('f-width').value) : null,
@@ -318,14 +494,15 @@
     else showView('stash');
   }
 
-  /* ---------- detail ---------- */
   function renderDetail(id) {
     const f = fabrics.find(x => x.id === id);
     if (!f) { showView('stash'); return; }
     currentDetailId = id;
     const s = IDEAS.suggestFor(f);
+    const sw = hx => hx ? `<span class="swatch sm" style="background:${esc(hx)};display:inline-block;vertical-align:-2px;margin-right:4px"></span>` : '';
     const attrs = [
-      ['Type', f.type], ['Weight', f.weight], ['Color', f.color],
+      ['Type', f.type], ['Weight', f.weight],
+      ['Primary color', f.color, f.colorHex], ['Secondary color', f.color2, f.color2Hex],
       ['Pattern', f.pattern], ['Fiber', f.fiber],
       ['Width', f.width ? f.width + '"' : ''], ['Stored in', f.location],
     ].filter(([, v]) => v);
@@ -341,8 +518,10 @@
         <button id="yd-plus" aria-label="Add ¼ yard">＋</button>
       </div>
       <div class="attr-grid">
-        ${attrs.map(([k, v]) => `<div class="attr"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}
+        ${attrs.map(([k, v, hx]) => `<div class="attr"><div class="k">${k}</div><div class="v">${sw(hx)}${esc(v)}</div></div>`).join('')}
       </div>
+      ${(f.tags || []).length ? `<div class="tags-row">${f.tags.map(t =>
+        `<span class="tag-chip">${esc(t)}</span>`).join('')}</div>` : ''}
       ${f.notes ? `<div class="notes-block">${esc(f.notes)}</div>` : ''}
       ${s.now.length ? `
         <div class="idea-fabric">
@@ -366,7 +545,6 @@
     renderList();
   }
 
-  /* ---------- ideas ---------- */
   function renderIdeas() {
     const el = $('ideas-content');
     if (!fabrics.length) {
@@ -398,7 +576,6 @@
     });
   }
 
-  /* ---------- backup ---------- */
   function exportStash() {
     const blob = new Blob([JSON.stringify({ version: 1, fabrics }, null, 2)],
       { type: 'application/json' });
@@ -425,17 +602,22 @@
     }
   }
 
-  /* ---------- init ---------- */
   function populateSelects() {
     $('f-type').innerHTML = '<option value="">—</option>' +
       IDEAS.FABRIC_TYPES.map(t => `<option>${t}</option>`).join('');
-    $('f-color').innerHTML = COLORS.map(c =>
+    const colorOpts = COLORS.map(c =>
       `<option value="${c}">${c || '—'}</option>`).join('');
+    $('f-color').innerHTML = colorOpts;
+    $('f-color2').innerHTML = colorOpts;
   }
 
   async function init() {
     populateSelects();
-    fabrics = await DB.getAll();
+    try {
+      fabrics = await DB.getAll();
+    } catch {
+      fabrics = [];
+    }
     renderList();
 
     document.querySelectorAll('.tab[data-view]').forEach(t =>
@@ -443,9 +625,23 @@
     $('add-btn').addEventListener('click', () => openForm(null));
     $('cancel-form').addEventListener('click', () => showView(currentDetailId ? 'detail' : 'stash'));
     $('fabric-form').addEventListener('submit', saveForm);
-    $('delete-fabric').addEventListener('click', async () => {
+    // two-tap delete: modal dialogs are blocked in sandboxed embeds
+    let deleteArmed = false;
+    const deleteBtn = $('delete-fabric');
+    deleteBtn.addEventListener('click', async () => {
       const id = $('f-id').value;
-      if (!id || !confirm('Delete this fabric from the stash?')) return;
+      if (!id) return;
+      if (!deleteArmed) {
+        deleteArmed = true;
+        deleteBtn.textContent = 'Tap again to delete for good';
+        setTimeout(() => {
+          deleteArmed = false;
+          deleteBtn.textContent = 'Delete fabric';
+        }, 3000);
+        return;
+      }
+      deleteArmed = false;
+      deleteBtn.textContent = 'Delete fabric';
       await DB.delete(id);
       fabrics = fabrics.filter(f => f.id !== id);
       currentDetailId = null;
@@ -495,16 +691,20 @@
       $('detect-chip').classList.add('hidden');
     });
 
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
     $('export-btn').addEventListener('click', exportStash);
     $('import-input').addEventListener('change', e => {
       if (e.target.files[0]) importStash(e.target.files[0]);
       e.target.value = '';
     });
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();

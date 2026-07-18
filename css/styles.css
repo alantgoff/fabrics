@@ -184,12 +184,28 @@ body {
 }
 .tab span { font-size: 1.3rem; }
 .tab.active { color: var(--accent); }
+.add-tab { justify-content: center; }
 .add-circle {
   display: flex; align-items: center; justify-content: center;
   width: 48px; height: 48px; border-radius: 50%;
-  background: var(--accent); color: #fff; font-size: 1.7rem !important;
+  background: var(--accent); color: #fff;
+  font-size: 1.9rem !important; line-height: 1; padding-bottom: 3px;
   margin-top: -18px; box-shadow: 0 3px 10px rgba(139, 90, 124, 0.4);
 }
+
+.palette-row { display: flex; align-items: center; gap: 7px; }
+.palette-row .lbl { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+.swatch {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.15); flex-shrink: 0;
+}
+.swatch.sm { width: 13px; height: 13px; }
+.card-swatches { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 5px; }
+.tag-chip {
+  display: inline-block; background: var(--border); color: var(--text);
+  border-radius: 12px; padding: 3px 10px; font-size: 0.78rem; font-weight: 600;
+}
+.tags-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 
 .detect-chip {
   display: flex; align-items: center; gap: 8px;
