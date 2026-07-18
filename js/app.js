@@ -1,6 +1,6 @@
 /* Fabric Stash — main app logic (vanilla JS, no dependencies). */
 (() => {
-  const APP_VERSION = 'v9';
+  const APP_VERSION = 'v10';
 
   /* ---------- custom field options ----------
    * User-created values for the dropdown fields, shared across fabrics.
@@ -305,7 +305,10 @@
     detectedColors = fabric ? {
       colorHex: fabric.colorHex || null,
       color2Hex: fabric.color2Hex || null,
-      palette: fabric.palette || [],
+      // older fabrics stored hexes without a palette — seed it from them
+      palette: (fabric.palette && fabric.palette.length
+        ? fabric.palette
+        : [fabric.colorHex, fabric.color2Hex]).filter(Boolean),
     } : null;
     $('f-id').value = fabric?.id || '';
     $('f-name').value = fabric?.name || '';
@@ -557,26 +560,46 @@
     }
     renderPaletteRow();
     renderFormThreadRow(detectedColors.colorHex);
+    // suggest a name from what the photo showed — only into an empty field
+    if (!$('f-name').value.trim()) {
+      const bits = [];
+      const colorWord = det.color === 'Multicolor / print'
+        ? 'multicolor' : (det.primary?.name || '').toLowerCase();
+      if (colorWord) bits.push(colorWord);
+      if (det.pattern && det.pattern !== 'Solid') {
+        bits.push(det.pattern === 'Plaid / check' ? 'plaid' : det.pattern.toLowerCase());
+      }
+      bits.push(det.material ? det.material.split(' /')[0].toLowerCase() : 'fabric');
+      const suggestion = bits.join(' ');
+      $('f-name').value = suggestion.charAt(0).toUpperCase() + suggestion.slice(1);
+    }
     chip.classList.remove('hidden');
     chip.textContent = 'Photo analysis: ' + det.summary
       + (applied.length ? ' — filled in ' + applied.join(' & ') + ' (edit if wrong)' : '');
   }
 
-  /* Editable swatch circles in the form: detected colors can be corrected
-   * by tapping, or set by hand on fabrics without a photo. */
+  /* Editable swatch circles in the form: a fabric can have any number of
+   * colors — tap a circle to correct it, ✕ to remove it, + to add one. */
+  function ensureDC() {
+    if (!detectedColors) detectedColors = { colorHex: null, color2Hex: null, palette: [] };
+    if (!Array.isArray(detectedColors.palette)) detectedColors.palette = [];
+    detectedColors.palette = detectedColors.palette.filter(Boolean);
+  }
+  function syncColorSlots() {
+    detectedColors.colorHex = detectedColors.palette[0] || null;
+    detectedColors.color2Hex = detectedColors.palette[1] || null;
+  }
   function renderPaletteRow() {
     const row = $('palette-row');
-    const dc = detectedColors || {};
-    const entries = [
-      ['Primary color', dc.colorHex],
-      ['Secondary color', dc.color2Hex],
-    ];
-    if ((dc.palette || []).length > 2 && dc.palette[2]) entries.push(['Accent color', dc.palette[2]]);
+    ensureDC();
+    const pal = detectedColors.palette;
     row.classList.remove('hidden');
-    row.innerHTML = '<span class="lbl">Colors — tap to edit:</span>'
-      + entries.map(([label, hx], i) =>
-        `<input type="color" class="swatch-edit${hx ? '' : ' unset'}" data-slot="${i}"
-          value="${esc(hx || '#c9c1bb')}" title="${label}" aria-label="${label}">`).join('');
+    row.innerHTML = '<span class="lbl">Colors:</span>'
+      + pal.map((hx, i) => `<span class="swatch-wrap">
+          <input type="color" class="swatch-edit" data-slot="${i}" value="${esc(hx)}" aria-label="Color ${i + 1} — tap to edit">
+          <button type="button" class="sw-x" data-slot="${i}" aria-label="Remove color ${i + 1}">✕</button>
+        </span>`).join('')
+      + (pal.length < 6 ? '<button type="button" class="swatch-add" aria-label="Add a color">+</button>' : '');
   }
 
   function processPhoto(file) {
@@ -678,9 +701,10 @@
 
   /* ---------- thread matching ---------- */
   function renderThreadSection(f) {
-    const colors = [['Primary', f.colorHex], ['Secondary', f.color2Hex]]
-      .filter(([, hx]) => hx);
-    if (!colors.length) return '';
+    const hexes = (f.palette && f.palette.length
+      ? f.palette : [f.colorHex, f.color2Hex]).filter(Boolean).slice(0, 4);
+    if (!hexes.length) return '';
+    const colors = hexes.map((hx, i) => ['Color ' + (i + 1), hx]);
     const owned = new Set(ownedThreads.map(t => t.id));
     const groups = colors.map(([label, hx]) => {
       const chips = THREADS.matchThreads(hx, 2).map(b =>
@@ -899,30 +923,46 @@
     const onNamedColor = slot => {
       const sel = slot === 0 ? $('f-color') : $('f-color2');
       const hx = NAMED_HEX[sel.value];
-      if (!hx) return; // '—' or Multicolor: keep whatever the photo found
-      if (!detectedColors) detectedColors = { colorHex: null, color2Hex: null, palette: [] };
-      if (!Array.isArray(detectedColors.palette)) detectedColors.palette = [];
-      if (slot === 0) { detectedColors.colorHex = hx; detectedColors.palette[0] = hx; }
-      else { detectedColors.color2Hex = hx; detectedColors.palette[1] = hx; }
+      if (!hx) return; // '—', Multicolor, or a custom name: keep the swatches
+      ensureDC();
+      while (detectedColors.palette.length <= slot) detectedColors.palette.push(hx);
+      detectedColors.palette[slot] = hx;
+      syncColorSlots();
       renderPaletteRow();
       renderFormThreadRow(detectedColors.colorHex);
     };
     $('f-color').addEventListener('change', () => onNamedColor(0));
     $('f-color2').addEventListener('change', () => onNamedColor(1));
 
-    // manual edits to the color swatch circles
+    // manual edits to the color swatch circles: edit, remove, add
     $('palette-row').addEventListener('input', e => {
       const el = e.target.closest('.swatch-edit');
       if (!el) return;
-      if (!detectedColors) detectedColors = { colorHex: null, color2Hex: null, palette: [] };
-      if (!Array.isArray(detectedColors.palette)) detectedColors.palette = [];
-      const slot = +el.dataset.slot;
-      const hex = el.value;
-      el.classList.remove('unset');
-      if (slot === 0) { detectedColors.colorHex = hex; detectedColors.palette[0] = hex; }
-      else if (slot === 1) { detectedColors.color2Hex = hex; detectedColors.palette[1] = hex; }
-      else { detectedColors.palette[slot] = hex; }
+      ensureDC();
+      detectedColors.palette[+el.dataset.slot] = el.value;
+      syncColorSlots();
       renderFormThreadRow(detectedColors.colorHex);
+    });
+    $('palette-row').addEventListener('click', e => {
+      const x = e.target.closest('.sw-x');
+      if (x) {
+        ensureDC();
+        detectedColors.palette.splice(+x.dataset.slot, 1);
+        syncColorSlots();
+        renderPaletteRow();
+        renderFormThreadRow(detectedColors.colorHex);
+        return;
+      }
+      if (e.target.closest('.swatch-add')) {
+        ensureDC();
+        detectedColors.palette.push('#b0a8a0');
+        syncColorSlots();
+        renderPaletteRow();
+        renderFormThreadRow(detectedColors.colorHex);
+        const inputs = $('palette-row').querySelectorAll('.swatch-edit');
+        const last = inputs[inputs.length - 1];
+        if (last) last.click(); // open the picker straight away where allowed
+      }
     });
 
     // manual update check
