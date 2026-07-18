@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [claude/fabric-inventory-app-harq65, master]
+    branches: [main, master, claude/fabric-inventory-app-harq65]
   workflow_dispatch:
 
 permissions:
