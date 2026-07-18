@@ -333,6 +333,19 @@ body {
 /* ---------- settings ---------- */
 .settings { display: flex; flex-direction: column; gap: 12px; max-width: 420px; margin: 8px auto 0; }
 .settings h2 { font-family: 'Fraunces', Georgia, serif; font-size: 1.2rem; font-weight: 620; }
+.settings h2 + .settings h2, .settings h2:not(:first-child) { margin-top: 14px; }
+.settings textarea {
+  padding: 11px 12px; font-size: 1rem; border: 1px solid var(--border);
+  border-radius: var(--r-md); background: var(--card); color: var(--text);
+  font-family: inherit; width: 100%; resize: vertical;
+}
+.seg-row { display: flex; gap: 8px; }
+.seg {
+  flex: 1; padding: 10px; font-size: 0.95rem; font-weight: 650;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--card); color: var(--muted); cursor: pointer; font-family: inherit;
+}
+.seg.active { background: var(--accent-soft); color: var(--accent-deep); border-color: var(--accent); }
 .muted { color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
 .import-label { text-align: center; cursor: pointer; }
 

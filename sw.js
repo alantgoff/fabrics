@@ -1,5 +1,5 @@
 /* Offline cache — the whole app shell works with no connection. */
-const CACHE = 'fabric-stash-v3';
+const CACHE = 'fabric-stash-v4';
 const ASSETS = [
   './',
   './index.html',

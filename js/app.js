@@ -713,6 +713,50 @@
       $('detect-chip').classList.add('hidden');
     });
 
+    // feedback: share via the system share sheet (text it over!) or open
+    // a pre-filled GitHub issue; clipboard fallback when neither works
+    let fbType = 'Idea';
+    document.querySelectorAll('.seg[data-fb-type]').forEach(btn =>
+      btn.addEventListener('click', () => {
+        fbType = btn.dataset.fbType;
+        document.querySelectorAll('.seg[data-fb-type]').forEach(b =>
+          b.classList.toggle('active', b === btn));
+      }));
+    const fbMessage = () => {
+      const text = $('fb-text').value.trim();
+      if (!text) { $('fb-status').textContent = 'Write a little something first!'; return null; }
+      return { text, full: `🧵 Fabric Stash ${fbType.toLowerCase()}:\n${text}` };
+    };
+    $('fb-share').addEventListener('click', async () => {
+      const msg = fbMessage();
+      if (!msg) return;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: `Fabric Stash ${fbType.toLowerCase()}`, text: msg.full });
+          $('fb-status').textContent = 'Shared ✔';
+        } else {
+          throw new Error('no share');
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') return; // she closed the share sheet
+        try {
+          await navigator.clipboard.writeText(msg.full);
+          $('fb-status').textContent = 'Copied to clipboard — paste it into a message ✔';
+        } catch {
+          $('fb-status').textContent = 'Sharing is blocked here — select the text above and copy it.';
+        }
+      }
+      $('fb-text').value = '';
+    });
+    $('fb-github').addEventListener('click', () => {
+      const msg = fbMessage();
+      if (!msg) return;
+      const title = encodeURIComponent(`[${fbType}] ` + msg.text.split('\n')[0].slice(0, 60));
+      const body = encodeURIComponent(msg.text + '\n\n_Sent from the Fabric Stash app_');
+      window.open(`https://github.com/alantgoff/fabrics/issues/new?title=${title}&body=${body}`, '_blank');
+      $('fb-status').textContent = 'Opened GitHub — tap "Submit new issue" there to finish.';
+    });
+
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
