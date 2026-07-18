@@ -341,7 +341,7 @@ body {
   flex-shrink: 0;
   display: flex; justify-content: space-around; align-items: center;
   background: var(--card); border-top: 1.5px dashed var(--border);
-  padding: 8px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 10px 0 calc(12px + env(safe-area-inset-bottom, 0px));
 }
 .tab {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -362,11 +362,10 @@ body {
 .add-tab { justify-content: center; }
 .add-circle {
   display: flex; align-items: center; justify-content: center;
-  width: 50px; height: 50px; border-radius: 50%;
+  width: 46px; height: 46px; border-radius: 50%;
   background: var(--accent); color: var(--on-accent);
-  font-size: 1.9rem; line-height: 1; padding-bottom: 3px;
-  margin-top: -20px;
-  box-shadow: 0 4px 14px rgba(99, 52, 78, 0.35);
+  font-size: 1.8rem; line-height: 1; padding-bottom: 2px;
+  box-shadow: 0 2px 10px rgba(99, 52, 78, 0.3);
   transition: transform 120ms ease;
 }
 .add-tab:active .add-circle { transform: scale(0.92); }

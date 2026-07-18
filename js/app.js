@@ -261,8 +261,30 @@
         const canvas = document.createElement('canvas');
         canvas.width = N; canvas.height = N;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, N, N);
+        // sample the center of the photo — the edges are often table,
+        // background, or shadow rather than the fabric itself
+        const cropX = img.width * 0.14, cropY = img.height * 0.14;
+        ctx.drawImage(img, cropX, cropY,
+          img.width - 2 * cropX, img.height - 2 * cropY, 0, 0, N, N);
         const data = ctx.getImageData(0, 0, N, N).data;
+
+        // blank canvas means the image never decoded — report nothing
+        // rather than classifying transparent black
+        let alphaSum = 0;
+        for (let i = 3; i < data.length; i += 4) alphaSum += data[i];
+        if (alphaSum / (data.length / 4) < 10) { resolve(null); return; }
+
+        // auto-exposure: dim indoor photos read as near-black, so lift
+        // underexposed images toward mid-gray before classifying
+        const lums = [];
+        for (let i = 0; i < data.length; i += 4) {
+          lums.push(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
+        }
+        lums.sort((a, b) => a - b);
+        const medianLum = lums[lums.length >> 1] / 255;
+        const gain = medianLum > 0.01 && medianLum < 0.32
+          ? Math.min(2.5, 0.45 / medianLum) : 1;
+        const px = i => Math.min(255, data[i] * gain);
 
         const hueBuckets = {}; // named color -> pixel count
         const bucketRgb = {};  // named color -> [rSum, gSum, bSum]
@@ -271,7 +293,7 @@
         let blueCount = 0, count = 0;
 
         for (let i = 0; i < data.length; i += 4) {
-          const r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255;
+          const r = px(i) / 255, g = px(i + 1) / 255, b = px(i + 2) / 255;
           const max = Math.max(r, g, b), min = Math.min(r, g, b);
           const l = (max + min) / 2;
           const d = max - min;
@@ -311,7 +333,7 @@
           }
           hueBuckets[name] = (hueBuckets[name] || 0) + 1;
           const acc = bucketRgb[name] || (bucketRgb[name] = [0, 0, 0]);
-          acc[0] += data[i]; acc[1] += data[i + 1]; acc[2] += data[i + 2];
+          acc[0] += px(i); acc[1] += px(i + 1); acc[2] += px(i + 2);
         }
 
         // texture: Sobel edge density + edge direction over the luminance field
