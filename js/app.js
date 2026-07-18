@@ -14,6 +14,10 @@
   let currentDetailId = null;
   let photoData = null;
   let detectedColors = null; // hexes from the last photo analysis
+  let ownedThreads = []; // the thread drawer
+
+  const threadId = (brand, code) => brand + '|' + code;
+  const brandShort = b => b.startsWith('Gütermann') ? 'Gütermann' : 'Coats & Clark';
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -227,6 +231,7 @@
     $('f-notes').value = fabric?.notes || '';
     updatePhotoPreview();
     renderPaletteRow(detectedColors?.palette);
+    renderFormThreadRow(fabric?.colorHex || null);
     $('detect-chip').classList.add('hidden');
     $('delete-fabric').classList.toggle('hidden', !fabric);
     showView('form');
@@ -452,6 +457,7 @@
       applied.push('type');
     }
     renderPaletteRow(detectedColors.palette);
+    renderFormThreadRow(det.primary?.hex);
     chip.classList.remove('hidden');
     chip.textContent = 'Photo analysis: ' + det.summary
       + (applied.length ? ' — filled in ' + applied.join(' & ') + ' (edit if wrong)' : '');
@@ -544,6 +550,7 @@
       </div>
       ${(f.tags || []).length ? `<div class="tags-row">${f.tags.map(t =>
         `<span class="tag-chip">${esc(t)}</span>`).join('')}</div>` : ''}
+      ${renderThreadSection(f)}
       ${f.notes ? `<div class="notes-block">${esc(f.notes)}</div>` : ''}
       ${s.now.length ? `
         <div class="idea-fabric">
@@ -558,6 +565,105 @@
     $('back-to-stash').onclick = () => showView('stash');
     $('yd-minus').onclick = () => adjustYards(f, -0.25);
     $('yd-plus').onclick = () => adjustYards(f, 0.25);
+  }
+
+  /* ---------- thread matching ---------- */
+  function renderThreadSection(f) {
+    const colors = [['Primary', f.colorHex], ['Secondary', f.color2Hex]]
+      .filter(([, hx]) => hx);
+    if (!colors.length) return '';
+    const owned = new Set(ownedThreads.map(t => t.id));
+    const groups = colors.map(([label, hx]) => {
+      const chips = THREADS.matchThreads(hx, 2).map(b =>
+        b.matches.map(m => {
+          const has = owned.has(threadId(b.brand, m.code));
+          return `<button class="thread-chip ${has ? 'owned' : ''}"
+            data-brand="${esc(b.brand)}" data-code="${esc(m.code)}"
+            data-name="${esc(m.name)}" data-hex="${esc(m.hex)}">
+            <span class="swatch sm" style="background:${esc(m.hex)}"></span>
+            ${esc(brandShort(b.brand))} ${esc(m.code)} · ${esc(m.name)} ${has ? '✔' : '+'}
+          </button>`;
+        }).join('')).join('');
+      return `${colors.length > 1 ? `<div class="thread-lbl">${label} color</div>` : ''}
+        <div class="thread-color">${chips}</div>`;
+    }).join('');
+    return `<div class="thread-section">
+      <h3>Matching thread</h3>
+      ${groups}
+      <p class="thread-note">✔ means it's in your thread drawer — tap a shade you own to
+        add it. Matches are approximate; a bright-daylight photo matches best.</p>
+    </div>`;
+  }
+
+  async function toggleThread(brand, code, name, hex) {
+    const id = threadId(brand, code);
+    const i = ownedThreads.findIndex(t => t.id === id);
+    if (i >= 0) {
+      ownedThreads.splice(i, 1);
+      await DB.deleteThread(id);
+    } else {
+      const thread = { id, brand, code, name, hex, dateAdded: Date.now() };
+      ownedThreads.push(thread);
+      await DB.putThread(thread);
+    }
+    renderThreadDrawer();
+  }
+
+  function renderFormThreadRow(hex) {
+    const row = $('form-thread-row');
+    if (!hex) { row.classList.add('hidden'); return; }
+    const best = THREADS.matchThreads(hex, 1)
+      .filter(b => b.matches.length)
+      .map(b => {
+        const m = b.matches[0];
+        return `<span class="swatch sm" style="background:${esc(m.hex)}"></span>
+          <span style="font-size:0.8rem">${esc(brandShort(b.brand))} <strong>${esc(m.code)}</strong></span>`;
+      }).join('');
+    row.classList.remove('hidden');
+    row.innerHTML = '<span class="lbl">Closest thread:</span>' + best;
+  }
+
+  function renderThreadDrawer() {
+    const list = $('thread-list');
+    if (!ownedThreads.length) {
+      list.innerHTML = '<p class="muted">Nothing in the drawer yet.</p>';
+      return;
+    }
+    list.innerHTML = ownedThreads
+      .slice()
+      .sort((a, b) => a.brand.localeCompare(b.brand) || a.code.localeCompare(b.code))
+      .map(t => `
+        <div class="thread-row">
+          <span class="swatch" style="background:${esc(t.hex || 'transparent')}"></span>
+          <span><strong>${esc(t.code)}</strong>${t.name ? ' · ' + esc(t.name) : ''}
+            <div class="meta">${esc(brandShort(t.brand))}</div></span>
+          <button class="rm" data-id="${esc(t.id)}" aria-label="Remove">✕</button>
+        </div>`).join('');
+  }
+
+  async function addThreadManually() {
+    const brand = $('t-brand').value;
+    const code = $('t-code').value.trim();
+    if (!code) { $('thread-status').textContent = 'Type the color code first.'; return; }
+    const known = THREADS.findShade(brand, code);
+    const id = threadId(brand, code);
+    if (ownedThreads.some(t => t.id === id)) {
+      $('thread-status').textContent = 'Already in the drawer.';
+      return;
+    }
+    const thread = {
+      id, brand, code,
+      name: known?.name || '',
+      hex: known?.hex || null,
+      dateAdded: Date.now(),
+    };
+    ownedThreads.push(thread);
+    await DB.putThread(thread);
+    renderThreadDrawer();
+    $('t-code').value = '';
+    $('thread-status').textContent = known
+      ? `Added ${known.name} ✔`
+      : `Added ${code} — code not in the built-in chart, so no swatch.`;
   }
 
   async function adjustYards(f, delta) {
@@ -599,7 +705,7 @@
   }
 
   function exportStash() {
-    const blob = new Blob([JSON.stringify({ version: 1, fabrics }, null, 2)],
+    const blob = new Blob([JSON.stringify({ version: 2, fabrics, threads: ownedThreads }, null, 2)],
       { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -617,6 +723,13 @@
       const valid = list.filter(f => f && f.id && f.name !== undefined);
       await DB.putMany(valid);
       fabrics = await DB.getAll();
+      if (Array.isArray(data.threads)) {
+        for (const t of data.threads) {
+          if (t && t.id && t.brand && t.code) await DB.putThread(t);
+        }
+        ownedThreads = await DB.getThreads();
+        renderThreadDrawer();
+      }
       renderList();
       $('settings-status').textContent = `Imported ${valid.length} fabric${valid.length === 1 ? '' : 's'} ✔`;
     } catch (err) {
@@ -631,16 +744,36 @@
       `<option value="${c}">${c || '—'}</option>`).join('');
     $('f-color').innerHTML = colorOpts;
     $('f-color2').innerHTML = colorOpts;
+    $('t-brand').innerHTML = THREADS.BRANDS.map(b =>
+      `<option value="${esc(b.name)}">${esc(brandShort(b.name))}</option>`).join('');
   }
 
   async function init() {
     populateSelects();
     try {
       fabrics = await DB.getAll();
+      ownedThreads = await DB.getThreads();
     } catch {
       fabrics = [];
     }
     renderList();
+    renderThreadDrawer();
+
+    // thread interactions: toggle on fabric detail, remove + manual add in drawer
+    $('detail-content').addEventListener('click', async e => {
+      const chip = e.target.closest('.thread-chip');
+      if (!chip) return;
+      await toggleThread(chip.dataset.brand, chip.dataset.code, chip.dataset.name, chip.dataset.hex);
+      if (currentDetailId) renderDetail(currentDetailId);
+    });
+    $('thread-list').addEventListener('click', async e => {
+      const rm = e.target.closest('.rm');
+      if (!rm) return;
+      ownedThreads = ownedThreads.filter(t => t.id !== rm.dataset.id);
+      await DB.deleteThread(rm.dataset.id);
+      renderThreadDrawer();
+    });
+    $('t-add').addEventListener('click', addThreadManually);
 
     document.querySelectorAll('.tab[data-view]').forEach(t =>
       t.addEventListener('click', () => showView(t.dataset.view)));

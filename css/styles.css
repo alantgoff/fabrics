@@ -330,6 +330,47 @@ body {
 .idea-chip .yd { opacity: 0.75; font-size: 0.75rem; font-weight: 600; }
 .ideas-intro { color: var(--muted); font-size: 0.9rem; margin: 8px 0 18px; line-height: 1.6; }
 
+/* ---------- thread matching ---------- */
+.thread-section { margin: 2px 0 16px; }
+.thread-section h3 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.05rem; font-weight: 600; margin-bottom: 9px;
+}
+.thread-lbl {
+  width: 100%; font-size: 0.68rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.07em; margin: 4px 0 2px;
+}
+.thread-color { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 6px; }
+.thread-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 999px; padding: 7px 13px; font-size: 0.82rem; font-weight: 550;
+  background: transparent; color: var(--muted);
+  border: 1.5px dashed var(--border); cursor: pointer; font-family: inherit;
+}
+.thread-chip.owned {
+  background: var(--accent-soft); color: var(--accent-deep);
+  border: 1px solid var(--accent);
+}
+.thread-note { color: var(--muted); font-size: 0.78rem; line-height: 1.5; margin-top: 6px; }
+.thread-list { display: flex; flex-direction: column; gap: 8px; }
+.thread-row {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 9px 12px; font-size: 0.9rem;
+}
+.thread-row .meta { color: var(--muted); font-size: 0.78rem; }
+.thread-row .rm {
+  margin-left: auto; background: none; border: none; color: var(--danger);
+  font-size: 1rem; cursor: pointer; padding: 4px 6px; font-family: inherit;
+}
+.thread-add { display: flex; gap: 8px; }
+.thread-add select, .thread-add input {
+  flex: 1; min-width: 0; padding: 10px 11px; font-size: 0.9rem;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--card); color: var(--text); font-family: inherit;
+}
+.thread-add .btn { flex: 0 0 auto; padding: 10px 18px; }
+
 /* ---------- settings ---------- */
 .settings { display: flex; flex-direction: column; gap: 12px; max-width: 420px; margin: 8px auto 0; }
 .settings h2 { font-family: 'Fraunces', Georgia, serif; font-size: 1.2rem; font-weight: 620; }
