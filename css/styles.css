@@ -25,6 +25,7 @@
   --thread: #c89b3c;
   --danger: #b3402f;
   --danger-soft: #f9e9e5;
+  --bar-bg: #ffffff;
   --shadow: 0 1px 2px rgba(99, 52, 78, 0.08), 0 4px 16px rgba(99, 52, 78, 0.06);
   --r-lg: 18px;
   --r-md: 12px;
@@ -35,7 +36,7 @@
     --bg: #1e161c; --card: #2a2027; --text: #f1e9ed; --muted: #a5929c;
     --border: #3e3039; --accent: #c288a8; --accent-deep: #d3a3bd;
     --accent-soft: #3a2a34; --on-accent: #241520; --thread: #d9b45c;
-    --danger: #e0705c; --danger-soft: #43272a;
+    --danger: #e0705c; --danger-soft: #43272a; --bar-bg: #2a2027;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
   }
 }
@@ -43,21 +44,21 @@
   --bg: #1e161c; --card: #2a2027; --text: #f1e9ed; --muted: #a5929c;
   --border: #3e3039; --accent: #c288a8; --accent-deep: #d3a3bd;
   --accent-soft: #3a2a34; --on-accent: #241520; --thread: #d9b45c;
-  --danger: #e0705c; --danger-soft: #43272a;
+  --danger: #e0705c; --danger-soft: #43272a; --bar-bg: #2a2027;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 :root[data-theme="light"] {
   --bg: #f8f4ef; --card: #fffdfa; --text: #2b2126; --muted: #8f7e85;
   --border: #e7ddd3; --accent: #7e4463; --accent-deep: #63344e;
   --accent-soft: #f3e7ee; --on-accent: #fffdfa; --thread: #c89b3c;
-  --danger: #b3402f; --danger-soft: #f9e9e5;
+  --danger: #b3402f; --danger-soft: #f9e9e5; --bar-bg: #ffffff;
   --shadow: 0 1px 2px rgba(99, 52, 78, 0.08), 0 4px 16px rgba(99, 52, 78, 0.06);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-/* html painted card-white so any sliver the phone leaves below the tab bar
+/* html painted bar-white so any sliver the phone leaves below the tab bar
  * (home-indicator area) matches the bar instead of reading as a gap */
-html { height: 100%; overflow: hidden; background: var(--card); }
+html { height: 100%; overflow: hidden; background: var(--bar-bg); }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 16px;
@@ -100,6 +101,8 @@ body {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* clearance for the fixed tab bar (18 + 46 + 6 = 70px tall + inset) */
+  padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
 }
 
 .view { display: none; padding: 4px 16px 24px; }
@@ -419,11 +422,21 @@ body {
 .import-label { text-align: center; cursor: pointer; }
 
 /* ---------- tab bar ---------- */
+/* Fixed to the real screen bottom — no dependence on dvh quirks. Extra top
+ * padding over bottom seats the icons low in the bar. */
 .tab-bar {
-  flex-shrink: 0;
+  position: fixed;
+  bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 560px;
+  z-index: 10;
   display: flex; justify-content: space-around; align-items: center;
-  background: var(--card); border-top: 1.5px dashed var(--border);
-  padding: 10px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--bar-bg); border-top: 1.5px dashed var(--border);
+  padding: 18px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+}
+/* white bleed below the bar: whatever the phone shows under it, it's bar-colored */
+.tab-bar::after {
+  content: ""; position: absolute; top: 100%; left: 0; right: 0;
+  height: 40vh; background: inherit;
 }
 .tab {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -434,7 +447,7 @@ body {
 .tab svg { display: block; }
 .tab.active { color: var(--accent); }
 .tab.active::after {
-  content: ""; position: absolute; bottom: -7px;
+  content: ""; position: absolute; bottom: -5px;
   width: 22px; border-bottom: 2px dashed var(--thread);
 }
 .tab:focus-visible, .btn:focus-visible, .icon-btn:focus-visible,
